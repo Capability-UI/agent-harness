@@ -45,7 +45,7 @@ function capabilityBase(id: string, options: {
 export function codingCapabilities(workspace: Workspace): Capability[] {
   return [
     capabilityBase('workspace.read', {
-      description: 'Read a UTF-8 text file from the workspace and return its contents. Use before editing to see exact text.',
+      description: 'Read a UTF-8 text file from the workspace and return its contents. Use before editing to see exact text. Path must be relative to workspace root.',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',
@@ -79,7 +79,7 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('workspace.edit', {
-      description: 'Replace one exact occurrence of oldString with newString in a file. oldString must match the current file text verbatim (including whitespace) and be unique; read the file first to copy it exactly.',
+      description: 'Replace one exact occurrence of oldString with newString in a file. CRITICAL: oldString must match the current file text verbatim (including whitespace) and be unique. ALWAYS call workspace.read first to verify the exact text before editing.',
       risk: 'medium',
       sideEffects: ['filesystem_write'],
       reversibility: 'partially_reversible',
@@ -98,7 +98,7 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('workspace.glob', {
-      description: 'List workspace files matching a glob pattern. Use to discover files by name or extension.',
+      description: 'List workspace files matching a glob pattern. Use to discover files by name or extension. Supports recursive ** wildcards.',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',
@@ -113,7 +113,7 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('workspace.grep', {
-      description: 'Search workspace file contents for a regular expression and return matching lines. Use to locate code before reading or editing.',
+      description: 'Search workspace file contents for a regular expression and return matching lines. Use to locate code before reading or editing. Supports JavaScript regex syntax.',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',
@@ -133,7 +133,7 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('workspace.bash', {
-      description: 'Run a shell command from the workspace root and return its stdout, stderr, and exit code. Use for building, running tests, or inspecting the environment.',
+      description: 'Run a shell command from the workspace root and return its stdout, stderr, and exit code. Use for building, running tests, or inspecting the environment. Quote all arguments containing spaces to prevent word splitting.',
       risk: 'high',
       sideEffects: ['process_spawn'],
       reversibility: 'irreversible',
@@ -157,7 +157,7 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       handler: async () => loadHarnessState(workspace),
     }),
     capabilityBase('harness.memory.append_progress', {
-      description: 'Append a short progress note to durable harness memory so later turns retain what was done and learned.',
+      description: 'Append a short progress note to durable harness memory so later turns retain what was done and learned. Keep notes concise to save context window.',
       risk: 'low',
       sideEffects: ['filesystem_write'],
       reversibility: 'partially_reversible',
