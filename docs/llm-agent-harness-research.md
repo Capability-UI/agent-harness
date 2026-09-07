@@ -199,14 +199,15 @@ Keel (`examples/agent-studio`) renders an authorized view. Copy the discipline (
 6. **Build for deletion.** If a stronger model makes compaction or a specialized tool unnecessary, remove it. If RLM training makes env-tips unnecessary, delete the tips.
 7. **Disclose the harness in evals.** Binding Constraint Thesis: do not claim model wins without naming loop, tools, context policy, and verification.
 
-## Open questions (also in the plan)
+## Settled answers (v1)
 
-See the plan's outstanding questions. The research-driven ones:
+These close the research questions using the full corpus, not two papers in isolation:
 
-- Is v1 a coding CLI, a CUP-governed product agent, or an RLM-style long-context worker?
-- How soon do we want a real REPL versus file pointers?
-- Is a Continual Harness Refiner in scope for v1, or only the \(\mathcal{H}\) data model?
-- Which model providers, and do we train for RLM use or only prompt it?
+- **Product:** coding agent CLI (`harness`), same job as Claude Code, Codex, Pi, and Prime Agent. CUP is the tool and policy kernel; this repo owns the loop.
+- **CUP install:** `file:../Capability-UI` in this workspace (same as CUP examples). Later consumers use GitHub Packages `@capability-ui/core@0.2.0`. No submodule, no vendored CUP source.
+- **Continual Harness:** persist \(\mathcal{H}\) on disk and let the worker edit it through CUP. No automatic Refiner in v1. Continual Harness helps strong models and hurts weak ones; LITMUS makes unreceipted skill writes an injection surface. Prime Agent's Refiner is v2 (`--refine`, subject `agent:refiner`).
+- **Context vs RLM:** v1 uses files, observation caps, and observation masking (Complexity Trap, context rot, OpenAI AGENTS.md map, Anthropic progressive disclosure). `src/repl.ts` is a reserved RLM interface, not a live REPL. Prompt-only RLM; no RLM training in this repo.
+- **Provider:** OpenAI-compatible `/chat/completions` (`OPENAI_API_KEY`, optional `OPENAI_BASE_URL` / `OPENAI_MODEL`).
 
 ## Sources
 

@@ -1,9 +1,18 @@
 # agent-harness
 
-An LLM agent harness that uses the Capability UI Protocol (CUP) as the kernel for tool definitions, authorization, context projection, and memory resources. This repo owns the loop, session, context assembly, and evaluation. CUP does not plan, compact, or run the model.
+Coding agent CLI in the same family as Claude Code, Codex, Pi, and Prime Agent. Capability UI Protocol (CUP) is the kernel for tool definitions, authorization, and receipts. This repo owns the loop, context, session, and workspace jail.
 
-See:
+```bash
+cd ../Capability-UI && npm install && npm run build
+cd ../agent-harness && npm install && npm run build
+npx harness init --workspace .
+npx harness tools --workspace .
+OPENAI_API_KEY=... npx harness run "fix the failing test" --workspace .
+```
 
-- [docs/llm-agent-harness-research.md](docs/llm-agent-harness-research.md) for the research synthesis (including Recursive Language Models and Continual Harness)
-- [docs/plans/2026-09-07-001-plan-capability-ui-harness.md](docs/plans/2026-09-07-001-plan-capability-ui-harness.md) for the build plan and open questions
-- [docs/developer/overview.md](docs/developer/overview.md) for developer orientation
+The `harness` binary is `dist/src/cli.js`. Run `npm run build` after a clean install.
+
+Requires a sibling checkout of `Capability-UI` (`file:../Capability-UI`). See [docs/developer/overview.md](docs/developer/overview.md).
+
+Research: [docs/llm-agent-harness-research.md](docs/llm-agent-harness-research.md)  
+Plan: [docs/plans/2026-09-07-001-plan-capability-ui-harness.md](docs/plans/2026-09-07-001-plan-capability-ui-harness.md)

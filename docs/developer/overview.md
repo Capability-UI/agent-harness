@@ -1,16 +1,36 @@
 # Developer docs
 
-This repository is the agent **harness** (loop, context, memory, evaluation) on top of Capability UI Protocol (**CUP**) for tools, identity, policy, and receipts.
+This repository is a **coding agent CLI** (`harness`). Capability UI is the kernel for tools, identity, policy, and receipts. This repo owns the loop, context assembly, session log, and workspace jail.
 
-## Documents
+## Run
 
-| Doc | Role |
+From a workspace that also has `Capability-UI` as a sibling directory (this environment):
+
+```bash
+cd Capability-UI && npm install && npm run build
+cd ../agent-harness && npm install && npm run build
+npx harness init --workspace .
+npx harness tools --workspace .
+OPENAI_API_KEY=... npx harness run "run the tests" --workspace .
+```
+
+`package.json` depends on `@capability-ui/core` via `file:../Capability-UI`, matching CUP examples. Published consumers should switch that to GitHub Packages `@capability-ui/core@0.2.0`.
+
+## Layout
+
+| Path | Role |
 | --- | --- |
-| [llm-agent-harness-research.md](../llm-agent-harness-research.md) | Research synthesis, including Recursive Language Models and Continual Harness |
-| [plans/2026-09-07-001-plan-capability-ui-harness.md](../plans/2026-09-07-001-plan-capability-ui-harness.md) | Build plan and open questions |
+| `src/host.ts` | deny-by-default CUP, `agent:coder` |
+| `src/tools.ts` | ACI capabilities |
+| `src/loop.ts` | ReAct through `cup.execute` |
+| `src/context.ts` | AGENTS.md map, skill index, observation masking |
+| `src/session.ts` | `.harness/sessions/*.jsonl` |
+| `src/repl.ts` | reserved RLM interface |
 
-## Related tree
+Harness state lives under `.harness/` (`prompt.md`, `progress.md`, `memory.json`, `skills/`, `agents/`). There is no automatic Continual Harness Refiner in v1. The agent may append progress and rewrite memory JSON through CUP.
 
-Capability-UI lives in the sibling checkout used by this workspace. Runtime types and policy live in that package (`src/runtime.ts`, `src/adapters.ts`). CUP does not run the agent loop.
+## Tests
 
-When implementation lands, keep this folder current: how to run the host, how subjects are minted, where session files live, and how evals disclose the harness.
+```bash
+npm test
+```

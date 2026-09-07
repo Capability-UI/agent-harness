@@ -1,127 +1,73 @@
-# Capability UI agent harness - Plan
+# Capability UI coding agent harness - Plan
 
 **Date:** 2026-09-07  
-**Status:** requirements plus recommended architecture; not implementation-ready until outstanding questions are answered  
-**Origin:** [llm-agent-harness-research.md](../llm-agent-harness-research.md)  
-**Repos:** this repo (`agent-harness`); scaffolding from sibling `Capability-UI` (`@capability-ui/core` 0.2.0)
+**Status:** implementation-ready for v1  
+**Origin:** [llm-agent-harness-research.md](../llm-agent-harness-research.md)
 
-## Goal
+## Settled decisions
 
-Build a **pre-wired agent harness** whose tool surface, identity, authorization, confirmation, delegation, and receipts are CUP, and whose loop, context, memory, and evaluation are this repo.
+| Decision | Choice | Why (from the full research, not two papers) |
+| --- | --- | --- |
+| Product | Coding agent **CLI** in the family of Claude Code, Codex, Pi, OpenHands, mini-SWE-agent, Prime Agent | User-settled. Harness, not a framework kit. |
+| CUP dependency | **`file:../Capability-UI`** in this workspace, same as CUP `examples/`. Publish path later: `@capability-ui/core` on GitHub Packages | Sibling checkout is how this environment is laid out. Packages needs a PAT and is the right *consumer* install once 0.2.0 is the only input. Do not submodule (double git, version skew) and do not copy CUP source. |
+| Continual Harness | **Schema plus agent-editable \(\mathcal{H}\) in v1. No automatic Refiner loop.** | Continual Harness (arXiv:2605.09998) shows live refinement helps strong models and **hurts** weak ones. Claude Code / Pi persist skills and memory files without a mandatory mid-episode teacher. Prime Agent layers a Refiner on top of that schema. LITMUS: skill writes are an injection surface, so they must be CUP `execute` with receipts. Automatic every-F-steps refinement is v2, behind an explicit flag, as a separate `agent:refiner` subject. |
+| Tool surface | SWE-agent **ACI** (read, edit, write, glob, grep, bash) plus harness memory/skill read. Not bash-only, not a 16-tool zoo | ACI beat a raw shell (Yang 2024). Vercel and Anthropic: few, non-overlapping tools. mini-SWE-agent proves bash-only can score; we still want structured edits and search for observation quality. |
+| Context | JIT files + observation cap + **observation masking** (keep last N full tool results) + short `AGENTS.md` map | Context rot (Chroma). Complexity Trap: masking matched LLM summarization on SWE-bench Verified at lower cost. OpenAI: fat AGENTS.md failed; ~100 line map. Anthropic: progressive disclosure for skills. RLM (Zhang; Prime Intellect): large payloads stay outside the window (files + cap now; REPL stub later). |
+| Loop | ReAct, turn budget, malformed retry, stop hook if the model claims done while tests/`passes` still fail | Willison / Anthropic long-running agents. Independent verification, not self-grade. |
+| Identity | Worker is `agent:coder`. Never impersonate the operator on tool calls | CUP agent-neutrality. |
+| Session | Append-only `.harness/sessions/*.jsonl`. Window is a projection | Managed Agents: session is not the context window. |
+| Eval | Disclose harness in any benchmark claim | Binding Constraint Thesis (arXiv:2605.23950). HAL: scaffold is first-class. |
 
-Late research that the design must not paint over:
+## v1 scope
 
-- **RLM** ([arXiv:2512.24601](https://arxiv.org/abs/2512.24601), [Prime Intellect](https://www.primeintellect.ai/blog/rlm)): large payloads live outside the transformer; the model programs over them; fat tools belong on sub-agents.
-- **Continual Harness** ([arXiv:2605.09998](https://arxiv.org/abs/2605.09998)): harness state \(\mathcal{H}=(p,\mathcal{G},\mathcal{K},\mathcal{M})\) is CRUD-able data. Live Refiner is later; the schema is v1.
+**In:** TypeScript CLI `harness`, CUP-governed workspace tools, file-backed \(\mathcal{H}\), OpenAI-compatible provider, tests without a live model.
 
-## Product contract (assumed until questions return)
+**Out:** live Refiner, RLM REPL (module reserved), multi-agent swarm, Postgres policy store, generative UI.
 
-**Primary actor:** a developer or operator running a CUP-governed agent on a workspace.
-
-**Outcome:** the agent can complete multi-step tasks by discovering authorized capabilities, reading scoped data, executing guarded actions, persisting progress across turns/sessions, and leaving receipts.
-
-**In scope (v1):**
-
-- TypeScript host using `@capability-ui/core`
-- Single worker agent as CUP `Subject` `type: 'agent'`
-- ReAct loop with turn budget, malformed-call retry, stop hook that re-reads disk state
-- Context assembly from: short `AGENTS.md` map, skill index (name+description), CUP `project()` catalog, recent messages, pointers to large artifacts
-- File-backed \(\mathcal{H}\): system prompt fragment, skill dirs, memory/progress JSON, session event log
-- MCP server (CUP `createMCPServer`) and `cup` CLI as operator surfaces
-- Observation char-cap; large `read()` results written to workspace files
-- Independent completion checks (tests, JSON `passes` fields), never model self-report alone
-
-**Out of scope (v1):**
-
-- Live Continual Harness Refiner
-- Full RLM REPL (interface reserved)
-- Multi-model routing / swarm A2A
-- Training (SFT/RL on RLM or co-learning)
-- Treating Keel's generative UI composer as the loop
-
-## Recommended architecture
+## Architecture
 
 ```
-Operator  -->  CLI / MCP / (later UI)
-                 |
-                 v
-           Harness runtime          <-- E, C, L, O, V
-           (loop, context, session)
-                 |
-                 v
-           CUP CapabilityUI         <-- T, G
-           (policy, project, prepare/execute, receipts)
-                 |
-        +--------+--------+
-        v                 v
-   Resource adapters   Sandbox (later)
-   (host data, files)  (code exec / RLM)
+harness CLI
+  loop (E) + context (C) + session (S) + eval stop (V)
+       |
+       v
+  CUP CapabilityUI (T + G)
+       |
+       v
+  workspace adapters (jail) + .harness artifacts (L3)
 ```
 
-**Session vs context (Managed Agents):** append-only event log is durable. The window is a *projection* of that log plus files. Compaction, if any, never deletes the log.
+Repo layout:
 
-**Identity:** worker `agent:<id>`. User confirms high-risk executes. Downstream CUP calls use the agent subject. Sub-agents (later) get attenuated grants.
+- `src/host.ts` — deny-by-default CUP, register capabilities, allow `agent:coder`
+- `src/workspace.ts` — path jail
+- `src/tools.ts` — ACI + memory/skill capabilities
+- `src/context.ts` — assemble system prompt, mask observations
+- `src/session.ts` — jsonl
+- `src/loop.ts` — tool-calling cycle through `prepare`/`execute`
+- `src/provider.ts` — OpenAI-compatible chat completions
+- `src/cli.ts` — `run`, `init`, `tools`
+- `src/harness-state.ts` — load \(p, \mathcal{G}, \mathcal{K}, \mathcal{M}\)
+- `src/repl.ts` — reserved RLM interface (not wired)
 
-**Tools:** only capabilities returned by `project()` / `tools/list` for that subject and purpose. Prefer few tools. Fat MCP/data tools should be callable from a sandbox or sub-agent so the root context stays small (Prime Intellect RLM rule).
+## Test files
 
-**Harness state on disk (v1 schema, no live Refiner):**
+- `test/workspace.test.ts`
+- `test/policy.test.ts`
+- `test/context.test.ts`
+- `test/loop.test.ts`
+- `test/cli.test.ts`
 
-| Path (repo-relative, illustrative) | Maps to \(\mathcal{H}\) |
-| --- | --- |
-| `AGENTS.md` | map into \(p\) and docs |
-| `.harness/prompt.md` | \(p\) body |
-| `.harness/agents/*.md` | \(\mathcal{G}\) |
-| `.harness/skills/*/SKILL.md` | \(\mathcal{K}\) |
-| `.harness/memory.json` + `progress.md` | \(\mathcal{M}\) |
-| `.harness/session.jsonl` | event log |
-| `feature_list.json` | Anthropic-style task truth |
+## Implementation notes
 
-Writes to these paths should eventually be CUP capabilities so a future Refiner cannot bypass policy.
+- Confirmation: workspace-jailed tools use `confirmation: 'none'` so the coding loop can run; still receipts. Unjailed bash is not offered.
+- Cap tool observations (default 32k chars); spill to `.harness/artifacts/`.
+- Skills: name + description in the system prompt; body loaded only via `skill.read`.
+- `AGENTS.md` injected up to a byte budget; remainder is a pointer.
 
-## Implementation units (after questions)
+## v2 (not this milestone)
 
-1. **Host bootstrap:** `CapabilityUI` instance, subject factory from env/auth, policy load, receipt sink.
-2. **Loop:** provider-agnostic tool-calling cycle; map model tool calls to `prepare`/`execute`; handle obligations.
-3. **Context assembler:** deterministic merge of map, skill index, authorized view, capped history, file pointers. Stable prefix for cache.
-4. **Session store:** jsonl events; resume by id.
-5. **Memory resources:** CUP `read` on progress/memory; agent may update via capability.
-6. **MCP + CLI wiring:** reuse CUP profiles; document subject passing.
-7. **Eval slice:** one golden task with disclosed harness (Binding Constraint Thesis).
-8. **Reserved modules (stubs only):** `context/repl.ts` (RLM), `harness/refiner.ts` (Continual Harness).
-
-Do not pre-write code in this plan. Follow Capability-UI patterns in `src/runtime.ts`, `src/adapters.ts`, `docs/docs/foundations/agent-neutrality.md`.
-
-## Test scenarios (when implementing)
-
-- Agent cannot execute a capability it has not been allowed to discover.
-- High-risk capability without confirmation is denied; receipt status `denied`.
-- Large read is offloaded; model sees path + preview under char cap.
-- Session resume reconstructs task from files + jsonl, not from a stuffed transcript.
-- Skill file is listed by name until opened.
-- Stop hook: model says done while `feature_list.json` still has `"passes": false`; loop continues or fails closed.
-- Worker cannot read another tenant's resource (scope).
-
-## Risks
-
-- Untrained models misuse RLM/REPL (Prime Intellect math-python regression). Keep v1 simple.
-- Weak models plus live Refiner can degrade (Continual Harness Flash-Lite). Gate Refiner on capability.
-- Skill injection (LITMUS). Skills are untrusted input unless operator-signed.
-- Dual policy (prompt rules vs CUP) will drift. CUP wins.
-
-## Outstanding questions
-
-Answer these before treating the plan as implementation-ready.
-
-1. **Job of v1:** coding CLI on a repo, CUP product copilot (CRM/desk/warehouse), long-context RLM worker, or eval harness?
-2. **Surfaces:** CLI, MCP, web UI, all? Which is the dogfood path?
-3. **How we consume Capability-UI:** GitHub Packages `@capability-ui/core`, path/workspace dependency, or git submodule?
-4. **Model providers for v1?**
-5. **Sandbox:** none, subprocess, Docker, Prime-style isolated REPL?
-6. **v1 memory:** files only, or also Postgres per CUP data-model docs?
-7. **Live Continual Harness Refiner in the first milestone, schema-only, or never for this product?**
-8. **Who may edit \(\mathcal{H}\):** operator only, worker via capabilities, separate refiner subject?
-9. **Success metric for v1:** a demo task, a disclosed SWE/Terminal-Bench run, or CUP policy-conformance tests?
-
-## Sources
-
-Full bibliography: [llm-agent-harness-research.md](../llm-agent-harness-research.md).
+- `--refine` Continual Harness Refiner as `agent:refiner`
+- RLM REPL for payloads that do not fit files-plus-cap
+- Sub-agents with attenuated CUP grants
+- Harbor / Terminal-Bench disclosed run
