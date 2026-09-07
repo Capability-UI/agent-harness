@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createModel, createToolNameCodec, resolveModelConfig } from '../src/provider.js';
+import { createModel, createToolNameCodec, resolveModelConfig, stripReasoning } from '../src/provider.js';
+
+test('stripReasoning removes reasoning-model chain-of-thought from content', () => {
+  assert.equal(stripReasoning('<think>plan the steps</think>Final answer.'), 'Final answer.');
+  // Stray closing tag (preamble with no opening tag), as emitted by Qwen.
+  assert.equal(stripReasoning('Thinking Process:\n1. compute\n</think>\n\nFour'), 'Four');
+  // Plain content is untouched (aside from trimming).
+  assert.equal(stripReasoning('just an answer'), 'just an answer');
+  // Multiple blocks.
+  assert.equal(stripReasoning('<think>a</think>keep<think>b</think> this'), 'keep this');
+});
 
 function jsonResponse(body: unknown): Response {
   return { ok: true, status: 200, async text() { return JSON.stringify(body); }, async json() { return body; } } as unknown as Response;

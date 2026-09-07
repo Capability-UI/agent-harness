@@ -75,7 +75,7 @@ function isRetryableStatus(status: number): boolean {
   return RETRYABLE_STATUS.has(status);
 }
 
-function normalizeText(content: unknown): string {
+function flattenContent(content: unknown): string {
   if (typeof content === 'string') return content;
   if (content === null || content === undefined) return '';
   if (Array.isArray(content)) {
@@ -95,6 +95,23 @@ function normalizeText(content: unknown): string {
     return out;
   }
   return '';
+}
+
+// Reasoning models (e.g. Qwen) leak chain-of-thought into the assistant `content`
+// field, either as <think>...</think> blocks or as a preamble terminated by a
+// stray </think>. Keep only the post-reasoning answer: drop balanced <think>
+// blocks, and if a closing tag remains, keep only what follows the last one.
+// Applied to the user-facing final answer (see cli.ts) rather than the replayed
+// message history, so in-context reasoning is preserved for the agent loop.
+export function stripReasoning(text: string): string {
+  let out = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  const lastClose = out.toLowerCase().lastIndexOf('</think>');
+  if (lastClose !== -1) out = out.slice(lastClose + '</think>'.length);
+  return out.trim();
+}
+
+function normalizeText(content: unknown): string {
+  return flattenContent(content);
 }
 
 function normalizeArguments(args: unknown): string {

@@ -4,7 +4,7 @@ import { DEFAULT_MAX_TURNS } from './constants.js';
 import { createHarnessCup } from './host.js';
 import { ensureHarnessLayout, loadHarnessState } from './harness-state.js';
 import { runAgentLoop } from './loop.js';
-import { createModel } from './provider.js';
+import { createModel, stripReasoning } from './provider.js';
 import { SessionLog } from './session.js';
 import { Workspace } from './workspace.js';
 
@@ -142,7 +142,7 @@ export async function runCli(argv: string[], write: (text: string) => void = tex
     maxTurns: options.maxTurns,
     session,
   });
-  write(`${result.text}\n\n[stop=${result.stopReason} turns=${result.turns} session=${result.sessionId}]\n`);
+  write(`${stripReasoning(result.text)}\n\n[stop=${result.stopReason} turns=${result.turns} session=${result.sessionId}]\n`);
   return 0;
 }
 
