@@ -5,9 +5,19 @@ researcher model proposes one change at a time to a single source file; a fixed,
 integrity-protected evaluator scores the harness; and a git ratchet keeps a change
 only when the score strictly improves, otherwise reverts it.
 
+## Benchmarks
+`research/eval/run.mjs` selects a battery via `EVAL_BATTERY`:
+
+- `battery` — quick synthetic smoke tasks (default).
+- `hard` — harder synthetic tasks (edit uniqueness with distractors, large-file /
+  observation-truncation, multi-file refactors, observation-masking recall).
+- `humaneval` — the real HumanEval benchmark (`openai/openai_humaneval`), cached in
+  `research/eval/data/humaneval.json` and graded by its official hidden unit tests
+  via `python3`. Size via `HUMANEVAL_N`.
+
 ## Metric (single source of truth)
-`research/eval/run.mjs` runs a fixed battery of coding tasks through the real
-harness `run` loop and prints JSON:
+`research/eval/run.mjs` runs the selected battery through the real harness `run`
+loop and prints JSON:
 
 - `passes` — number of tasks whose deterministic grader passed (primary metric, higher is better).
 - `totalTurns` — sum of agent turns across tasks (tie-breaker, lower is better when `passes` is equal).

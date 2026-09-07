@@ -7,7 +7,15 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { TASKS } from './battery.mjs';
+
+const ALLOWED_BATTERIES = { battery: './battery.mjs', hard: './hard.mjs', humaneval: './humaneval.mjs' };
+const batteryKey = process.env.EVAL_BATTERY ?? 'battery';
+const batterySpec = ALLOWED_BATTERIES[batteryKey];
+if (!batterySpec) {
+  process.stderr.write(`Unknown EVAL_BATTERY=${batteryKey}; allowed: ${Object.keys(ALLOWED_BATTERIES).join(', ')}\n`);
+  process.exit(2);
+}
+const { TASKS } = await import(batterySpec);
 
 const execFileP = promisify(execFile);
 const HARNESS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -48,7 +56,7 @@ async function main() {
   }
   const passes = results.filter(r => r.pass).length;
   const totalTurns = results.reduce((sum, r) => sum + r.turns, 0);
-  const metric = { model: process.env.OPENAI_MODEL ?? '(default)', passes, total: results.length, totalTurns, tasks: results };
+  const metric = { battery: batteryKey, model: process.env.OPENAI_MODEL ?? '(default)', passes, total: results.length, totalTurns, tasks: results };
   process.stdout.write(JSON.stringify(metric) + '\n');
 }
 
