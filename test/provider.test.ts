@@ -1,6 +1,41 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createModel, resolveModelConfig } from '../src/provider.js';
+import { createModel, createToolNameCodec, resolveModelConfig } from '../src/provider.js';
+
+const OPENAI_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+test('tool name codec maps CUP ids to wire-safe names and back', () => {
+  const ids = [
+    'workspace.read',
+    'workspace.bash',
+    'harness.memory.read',
+    'harness.memory.append_progress',
+    'harness.features.read',
+  ];
+  const codec = createToolNameCodec(ids);
+  for (const id of ids) {
+    const wire = codec.toWire(id);
+    assert.match(wire, OPENAI_NAME_PATTERN, `wire name for ${id} must satisfy OpenAI pattern`);
+    assert.equal(codec.fromWire(wire), id, `round-trip must recover ${id}`);
+  }
+});
+
+test('tool name codec disambiguates colliding sanitized names', () => {
+  const codec = createToolNameCodec(['a.b', 'a-b']);
+  const first = codec.toWire('a.b');
+  const second = codec.toWire('a-b');
+  assert.notEqual(first, second);
+  assert.match(first, OPENAI_NAME_PATTERN);
+  assert.match(second, OPENAI_NAME_PATTERN);
+  assert.equal(codec.fromWire(first), 'a.b');
+  assert.equal(codec.fromWire(second), 'a-b');
+});
+
+test('tool name codec passes through unknown names unchanged on fromWire', () => {
+  const codec = createToolNameCodec(['workspace.read']);
+  assert.equal(codec.fromWire('workspace_read'), 'workspace.read');
+  assert.equal(codec.fromWire('unknown_name'), 'unknown_name');
+});
 
 test('resolveModelConfig uses env and defaults', () => {
   const prevKey = process.env.OPENAI_API_KEY;

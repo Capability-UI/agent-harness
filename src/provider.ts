@@ -26,6 +26,44 @@ interface OpenAiMessage {
   tool_calls?: OpenAiToolCall[];
 }
 
+export interface ToolNameCodec {
+  toWire(name: string): string;
+  fromWire(name: string): string;
+}
+
+const OPENAI_FUNCTION_NAME_PATTERN = /[^a-zA-Z0-9_-]/g;
+
+function sanitizeToolName(name: string): string {
+  const cleaned = name.replace(OPENAI_FUNCTION_NAME_PATTERN, '_');
+  return cleaned.length > 0 ? cleaned : 'tool';
+}
+
+// CUP capability ids (e.g. `workspace.read`) contain dots, but OpenAI-compatible
+// function-calling APIs require names matching `^[a-zA-Z0-9_-]+$`. Map ids to
+// wire-safe names and back through an explicit table, because reversing by string
+// substitution is ambiguous for ids like `harness.memory.append_progress`.
+export function createToolNameCodec(originalNames: Iterable<string>): ToolNameCodec {
+  const toWireMap = new Map<string, string>();
+  const fromWireMap = new Map<string, string>();
+  const used = new Set<string>();
+  for (const original of originalNames) {
+    if (toWireMap.has(original)) continue;
+    const base = sanitizeToolName(original);
+    let candidate = base;
+    let suffix = 2;
+    while (used.has(candidate)) {
+      candidate = `${base}_${suffix++}`;
+    }
+    used.add(candidate);
+    toWireMap.set(original, candidate);
+    fromWireMap.set(candidate, original);
+  }
+  return {
+    toWire: name => toWireMap.get(name) ?? sanitizeToolName(name),
+    fromWire: name => fromWireMap.get(name) ?? name,
+  };
+}
+
 export class OpenAiCompatibleModel implements LanguageModel {
   constructor(
     private readonly options: {
@@ -37,6 +75,14 @@ export class OpenAiCompatibleModel implements LanguageModel {
 
   async complete(messages: ChatMessage[], tools: ToolSpec[]): Promise<AssistantTurn> {
     const url = `${this.options.baseUrl.replace(/\/$/, '')}/chat/completions`;
+    const originalNames = new Set<string>();
+    for (const tool of tools) originalNames.add(tool.name);
+    for (const message of messages) {
+      if (message.role === 'assistant' && message.toolCalls) {
+        for (const call of message.toolCalls) originalNames.add(call.name);
+      }
+    }
+    const codec = createToolNameCodec(originalNames);
     const body = {
       model: this.options.model,
       messages: messages.map(message => {
@@ -50,7 +96,7 @@ export class OpenAiCompatibleModel implements LanguageModel {
             tool_calls: message.toolCalls.map(call => ({
               id: call.id,
               type: 'function',
-              function: { name: call.name, arguments: call.arguments },
+              function: { name: codec.toWire(call.name), arguments: call.arguments },
             })),
           };
         }
@@ -58,7 +104,7 @@ export class OpenAiCompatibleModel implements LanguageModel {
       }),
       tools: tools.map(tool => ({
         type: 'function',
-        function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+        function: { name: codec.toWire(tool.name), description: tool.description, parameters: tool.inputSchema },
       })),
     };
     const response = await fetch(url, {
@@ -77,7 +123,7 @@ export class OpenAiCompatibleModel implements LanguageModel {
     const message = json.choices?.[0]?.message;
     const toolCalls: ToolCall[] = (message?.tool_calls ?? []).map((call, index) => ({
       id: call.id ?? `call_${index}`,
-      name: call.function?.name ?? '',
+      name: codec.fromWire(call.function?.name ?? ''),
       arguments: call.function?.arguments ?? '{}',
     }));
     return { text: message?.content ?? '', toolCalls };
