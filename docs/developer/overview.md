@@ -4,11 +4,10 @@ This repository is a **coding agent CLI** (`harness`). Capability UI is the kern
 
 ## Run
 
-From a workspace that also has `Capability-UI` as a sibling directory (this environment):
+The harness builds standalone (CUP is vendored as a prebuilt package; no sibling needed):
 
 ```bash
-cd Capability-UI && npm install && npm run build
-cd ../agent-harness && npm install && npm run build
+cd agent-harness && npm install && npm run build
 npx harness init --workspace .
 npx harness tools --workspace .
 OPENAI_API_KEY=... npx harness run "run the tests" --workspace .
@@ -25,7 +24,7 @@ npx harness run "run the tests" --workspace . \
 
 Env vars `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` work the same way. CLI flags override env.
 
-`package.json` depends on `@capability-ui/core` via `file:../Capability-UI`, matching CUP examples. Published consumers should switch that to GitHub Packages `@capability-ui/core@0.2.0`.
+`package.json` depends on `@capability-ui/core` as a **prebuilt package tarball** vendored at `vendor/capability-ui-core.tgz` (`file:vendor/capability-ui-core.tgz`), so the harness builds standalone with no sibling `../Capability-UI` checkout and without recompiling CUP. Regenerate it with `./scripts/vendor-cup.sh ../Capability-UI` when CUP changes. Registry consumers can instead switch to GitHub Packages `@capability-ui/core@0.2.0` (needs a `read:packages` token).
 
 ## Layout
 

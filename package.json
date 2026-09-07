@@ -33,7 +33,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@capability-ui/core": "file:../Capability-UI"
+    "@capability-ui/core": "file:vendor/capability-ui-core.tgz"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -16,24 +16,36 @@ context assembly, session log, and the workspace jail.
 ## Requirements
 
 - Node.js **>= 20** (developed on Node 22).
-- A sibling checkout of `Capability-UI` — the harness depends on `@capability-ui/core` via `file:../Capability-UI`.
 - For `harness run`: an API key for an OpenAI-compatible endpoint.
+
+No sibling checkout is required. The CUP kernel (`@capability-ui/core`) is consumed
+as a **prebuilt package** vendored in this repo at `vendor/capability-ui-core.tgz`
+and referenced from `package.json` as `file:vendor/capability-ui-core.tgz`, so a
+plain `npm install` resolves it without building CUP from source.
 
 ## Install & build
 
-The two repos must sit side by side (`Capability-UI` and `agent-harness` as siblings):
+The harness builds standalone — no `../Capability-UI` needed:
 
 ```bash
-# 1) build the CUP kernel first (the harness imports its built dist)
-cd Capability-UI && npm install && npm run build
-
-# 2) build the harness
-cd ../agent-harness && npm install && npm run build
+cd agent-harness
+npm install        # installs the vendored @capability-ui/core package
+npm run build
 ```
 
 The CLI binary is `dist/src/cli.js` (exposed as `harness`). Re-run `npm run build`
 after a clean install or any source change. For a no-build dev loop use
 `npm run harness -- <args>` (runs `src/cli.ts` through `tsx`).
+
+### Refreshing the vendored CUP package
+
+When `Capability-UI` changes and you want the harness to pick it up, re-pack the
+prebuilt tarball from a sibling checkout (the sibling is needed only for this step,
+never for building or running the harness):
+
+```bash
+./scripts/vendor-cup.sh ../Capability-UI
+```
 
 ## Quickstart
 
@@ -200,6 +212,8 @@ under `research/eval/data/` for reproducibility (`research/eval/fetch-benchmark.
 | `src/session.ts` | JSONL session logging. |
 | `src/observations.ts` | Observation capping / artifact spill. |
 | `research/` | Autoresearch loop, evaluators, and benchmark batteries. |
+| `vendor/capability-ui-core.tgz` | Prebuilt `@capability-ui/core` package (the CUP kernel). |
+| `scripts/vendor-cup.sh` | Re-pack the vendored CUP tarball from a sibling checkout. |
 
 ## Testing
 
