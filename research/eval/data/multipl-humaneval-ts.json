@@ -1,0 +1,383 @@
+{
+  "dataset": "nuprl/MultiPL-E",
+  "config": "humaneval-ts",
+  "split": "test",
+  "count": 25,
+  "rows": [
+    {
+      "name": "HumanEval_0_has_close_elements",
+      "language": "ts",
+      "prompt": "//Check if in given array of numbers, are any two numbers closer to each other than\n// given threshold.\n// >>> has_close_elements([1.0, 2.0, 3.0], 0.5)\n// false\n// >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)\n// true\nfunction has_close_elements(numbers: number[], threshold: number): boolean {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_0_has_close_elements.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = has_close_elements;\n  assert.deepEqual(candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.3),true);\n  assert.deepEqual(candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.05),false);\n  assert.deepEqual(candidate([1.0, 2.0, 5.9, 4.0, 5.0], 0.95),true);\n  assert.deepEqual(candidate([1.0, 2.0, 5.9, 4.0, 5.0], 0.8),false);\n  assert.deepEqual(candidate([1.0, 2.0, 3.0, 4.0, 5.0, 2.0], 0.1),true);\n  assert.deepEqual(candidate([1.1, 2.2, 3.1, 4.1, 5.1], 1.0),true);\n  assert.deepEqual(candidate([1.1, 2.2, 3.1, 4.1, 5.1], 0.5),false);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_1_separate_paren_groups",
+      "language": "ts",
+      "prompt": "//Input to this function is a string containing multiple groups of nested parentheses. Your goal is to\n// separate those group into separate strings and return the array of those.\n// Separate groups are balanced (each open brace is properly closed) and not nested within each other\n// Ignore any spaces in the input string.\n// >>> separate_paren_groups(\"( ) (( )) (( )( ))\")\n// [\"()\", \"(())\", \"(()())\"]\nfunction separate_paren_groups(paren_string: string): string[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_1_separate_paren_groups.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = separate_paren_groups;\n  assert.deepEqual(candidate(\"(()()) ((())) () ((())()())\"),[\"(()())\", \"((()))\", \"()\", \"((())()())\"]);\n  assert.deepEqual(candidate(\"() (()) ((())) (((())))\"),[\"()\", \"(())\", \"((()))\", \"(((())))\"]);\n  assert.deepEqual(candidate(\"(()(())((())))\"),[\"(()(())((())))\"]);\n  assert.deepEqual(candidate(\"( ) (( )) (( )( ))\"),[\"()\", \"(())\", \"(()())\"]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_2_truncate_number",
+      "language": "ts",
+      "prompt": "//Given a positive floating point number, it can be decomposed into\n// and integer part (largest integer smaller than given number) and decimals\n// (leftover part always smaller than 1).\n// Return the decimal part of the number.\n// >>> truncate_number(3.5)\n// 0.5\nfunction truncate_number(number: number): number {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_2_truncate_number.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = truncate_number;\n  assert.deepEqual(candidate(3.5),0.5);\n  assert.deepEqual(candidate(1.25),0.25);\n  assert.deepEqual(candidate(123.0),0.0);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_3_below_zero",
+      "language": "ts",
+      "prompt": "//You're given an array of deposit and withdrawal operations on a bank account that starts with\n// zero balance. Your task is to detect if at any point the balance of account fallls below zero, and\n// at that point function should return true. Otherwise it should return false.\n// >>> below_zero([1, 2, 3])\n// false\n// >>> below_zero([1, 2, -4, 5])\n// true\nfunction below_zero(operations: number[]): boolean {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_3_below_zero.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = below_zero;\n  assert.deepEqual(candidate([]),false);\n  assert.deepEqual(candidate([1, 2, -3, 1, 2, -3]),false);\n  assert.deepEqual(candidate([1, 2, -4, 5, 6]),true);\n  assert.deepEqual(candidate([1, -1, 2, -2, 5, -5, 4, -4]),false);\n  assert.deepEqual(candidate([1, -1, 2, -2, 5, -5, 4, -5]),true);\n  assert.deepEqual(candidate([1, -2, 2, -2, 5, -5, 4, -4]),true);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_4_mean_absolute_deviation",
+      "language": "ts",
+      "prompt": "//For a given array of input numbers, calculate Mean Absolute Deviation\n// around the mean of this dataset.\n// Mean Absolute Deviation is the average absolute difference between each\n// element and a centerpoint (mean in this case):\n// MAD = average | x - x_mean |\n// >>> mean_absolute_deviation([1.0, 2.0, 3.0, 4.0])\n// 1.0\nfunction mean_absolute_deviation(numbers: number[]): number {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_4_mean_absolute_deviation.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = mean_absolute_deviation;\n  assert.deepEqual(candidate([1.0, 2.0]),0.5);\n  assert.deepEqual(candidate([1.0, 2.0, 3.0, 4.0]),1.0);\n  assert.deepEqual(candidate([1.0, 2.0, 3.0, 4.0, 5.0]),1.2);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_5_intersperse",
+      "language": "ts",
+      "prompt": "//Insert a number 'delimeter' between every two consecutive elements of input array `numbers'\n// >>> intersperse([], 4)\n// []\n// >>> intersperse([1, 2, 3], 4)\n// [1, 4, 2, 4, 3]\nfunction intersperse(numbers: number[], delimeter: number): number[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_5_intersperse.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = intersperse;\n  assert.deepEqual(candidate([], 7),[]);\n  assert.deepEqual(candidate([5, 6, 3, 2], 8),[5, 8, 6, 8, 3, 8, 2]);\n  assert.deepEqual(candidate([2, 2, 2], 2),[2, 2, 2, 2, 2]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_6_parse_nested_parens",
+      "language": "ts",
+      "prompt": "//Input to this function is a string represented multiple groups for nested parentheses separated by spaces.\n// For each of the group, output the deepest level of nesting of parentheses.\n// E.g. (()()) has maximum two levels of nesting while ((())) has three.\n// >>> parse_nested_parens(\"(()()) ((())) () ((())()())\")\n// [2, 3, 1, 3]\nfunction parse_nested_parens(paren_string: string): number[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_6_parse_nested_parens.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = parse_nested_parens;\n  assert.deepEqual(candidate(\"(()()) ((())) () ((())()())\"),[2, 3, 1, 3]);\n  assert.deepEqual(candidate(\"() (()) ((())) (((())))\"),[1, 2, 3, 4]);\n  assert.deepEqual(candidate(\"(()(())((())))\"),[4]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_7_filter_by_substring",
+      "language": "ts",
+      "prompt": "//Filter an input array of strings only for ones that contain given substring\n// >>> filter_by_substring([], \"a\")\n// []\n// >>> filter_by_substring([\"abc\", \"bacd\", \"cde\", \"array\"], \"a\")\n// [\"abc\", \"bacd\", \"array\"]\nfunction filter_by_substring(strings: string[], substring: string): string[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_7_filter_by_substring.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = filter_by_substring;\n  assert.deepEqual(candidate([], \"john\"),[]);\n  assert.deepEqual(candidate([\"xxx\", \"asd\", \"xxy\", \"john doe\", \"xxxAAA\", \"xxx\"], \"xxx\"),[\"xxx\", \"xxxAAA\", \"xxx\"]);\n  assert.deepEqual(candidate([\"xxx\", \"asd\", \"aaaxxy\", \"john doe\", \"xxxAAA\", \"xxx\"], \"xx\"),[\"xxx\", \"aaaxxy\", \"xxxAAA\", \"xxx\"]);\n  assert.deepEqual(candidate([\"grunt\", \"trumpet\", \"prune\", \"gruesome\"], \"run\"),[\"grunt\", \"prune\"]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_8_sum_product",
+      "language": "ts",
+      "prompt": "//For a given array of integers, return an array consisting of a sum and a product of all the integers in an array.\n// Empty sum should be equal to 0 and empty product should be equal to 1.\n// >>> sum_product([])\n// [0, 1]\n// >>> sum_product([1, 2, 3, 4])\n// [10, 24]\nfunction sum_product(numbers: number[]): [number, number] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_8_sum_product.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = sum_product;\n  assert.deepEqual(candidate([]),[0, 1]);\n  assert.deepEqual(candidate([1, 1, 1]),[3, 1]);\n  assert.deepEqual(candidate([100, 0]),[100, 0]);\n  assert.deepEqual(candidate([3, 5, 7]),[15, 105]);\n  assert.deepEqual(candidate([10]),[10, 10]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_9_rolling_max",
+      "language": "ts",
+      "prompt": "//From a given array of integers, generate an array of rolling maximum element found until given moment\n// in the sequence.\n// >>> rolling_max([1, 2, 3, 2, 3, 4, 2])\n// [1, 2, 3, 3, 3, 4, 4]\nfunction rolling_max(numbers: number[]): number[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_9_rolling_max.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = rolling_max;\n  assert.deepEqual(candidate([]),[]);\n  assert.deepEqual(candidate([1, 2, 3, 4]),[1, 2, 3, 4]);\n  assert.deepEqual(candidate([4, 3, 2, 1]),[4, 4, 4, 4]);\n  assert.deepEqual(candidate([3, 2, 3, 100, 3]),[3, 3, 3, 100, 100]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_10_make_palindrome",
+      "language": "ts",
+      "prompt": "//Find the shortest palindrome that begins with a supplied string.\n// Algorithm idea is simple:\n// - Find the longest postfix of supplied string that is a palindrome.\n// - Append to the end of the string reverse of a string prefix that comes before the palindromic suffix.\n// >>> make_palindrome(\"\")\n// \"\"\n// >>> make_palindrome(\"cat\")\n// \"catac\"\n// >>> make_palindrome(\"cata\")\n// \"catac\"\nfunction make_palindrome(string: string): string {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_10_make_palindrome.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = make_palindrome;\n  assert.deepEqual(candidate(\"\"),\"\");\n  assert.deepEqual(candidate(\"x\"),\"x\");\n  assert.deepEqual(candidate(\"xyz\"),\"xyzyx\");\n  assert.deepEqual(candidate(\"xyx\"),\"xyx\");\n  assert.deepEqual(candidate(\"jerry\"),\"jerryrrej\");\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_11_string_xor",
+      "language": "ts",
+      "prompt": "//Input are two strings a and b consisting only of 1s and 0s.\n// Perform binary XOR on these inputs and return result also as a string.\n// >>> string_xor(\"010\", \"110\")\n// \"100\"\nfunction string_xor(a: string, b: string): string {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_11_string_xor.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = string_xor;\n  assert.deepEqual(candidate(\"111000\", \"101010\"),\"010010\");\n  assert.deepEqual(candidate(\"1\", \"1\"),\"0\");\n  assert.deepEqual(candidate(\"0101\", \"0000\"),\"0101\");\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_12_longest",
+      "language": "ts",
+      "prompt": "//Out of array of strings, return the longest one. Return the first one in case of multiple\n// strings of the same length. Return undefined in case the input array is empty.\n// >>> longest([])\n// undefined\n// >>> longest([\"a\", \"b\", \"c\"])\n// \"a\"\n// >>> longest([\"a\", \"bb\", \"ccc\"])\n// \"ccc\"\nfunction longest(strings: string[]): string | undefined {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_12_longest.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = longest;\n  assert.deepEqual(candidate([]),undefined);\n  assert.deepEqual(candidate([\"x\", \"y\", \"z\"]),\"x\");\n  assert.deepEqual(candidate([\"x\", \"yyy\", \"zzzz\", \"www\", \"kkkk\", \"abc\"]),\"zzzz\");\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_13_greatest_common_divisor",
+      "language": "ts",
+      "prompt": "//Return a greatest common divisor of two integers a and b\n// >>> greatest_common_divisor(3, 5)\n// 1\n// >>> greatest_common_divisor(25, 15)\n// 5\nfunction greatest_common_divisor(a: number, b: number): number {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_13_greatest_common_divisor.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = greatest_common_divisor;\n  assert.deepEqual(candidate(3, 7),1);\n  assert.deepEqual(candidate(10, 15),5);\n  assert.deepEqual(candidate(49, 14),7);\n  assert.deepEqual(candidate(144, 60),12);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_14_all_prefixes",
+      "language": "ts",
+      "prompt": "//Return array of all prefixes from shortest to longest of the input string\n// >>> all_prefixes(\"abc\")\n// [\"a\", \"ab\", \"abc\"]\nfunction all_prefixes(string: string): string[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_14_all_prefixes.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = all_prefixes;\n  assert.deepEqual(candidate(\"\"),[]);\n  assert.deepEqual(candidate(\"asdfgh\"),[\"a\", \"as\", \"asd\", \"asdf\", \"asdfg\", \"asdfgh\"]);\n  assert.deepEqual(candidate(\"WWW\"),[\"W\", \"WW\", \"WWW\"]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_15_string_sequence",
+      "language": "ts",
+      "prompt": "//Return a string containing space-delimited numbers starting from 0 upto n inclusive.\n// >>> string_sequence(0)\n// \"0\"\n// >>> string_sequence(5)\n// \"0 1 2 3 4 5\"\nfunction string_sequence(n: number): string {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_15_string_sequence.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = string_sequence;\n  assert.deepEqual(candidate(0),\"0\");\n  assert.deepEqual(candidate(3),\"0 1 2 3\");\n  assert.deepEqual(candidate(10),\"0 1 2 3 4 5 6 7 8 9 10\");\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_16_count_distinct_characters",
+      "language": "ts",
+      "prompt": "//Given a string, find out how many distinct characters (regardless of case) does it consist of\n// >>> count_distinct_characters(\"xyzXYZ\")\n// 3\n// >>> count_distinct_characters(\"Jerry\")\n// 4\nfunction count_distinct_characters(string: string): number {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_16_count_distinct_characters.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = count_distinct_characters;\n  assert.deepEqual(candidate(\"\"),0);\n  assert.deepEqual(candidate(\"abcde\"),5);\n  assert.deepEqual(candidate(\"abcdecadeCADE\"),5);\n  assert.deepEqual(candidate(\"aaaaAAAAaaaa\"),1);\n  assert.deepEqual(candidate(\"Jerry jERRY JeRRRY\"),5);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_17_parse_music",
+      "language": "ts",
+      "prompt": "//Input to this function is a string representing musical notes in a special ASCII format.\n// Your task is to parse this string and return array of integers corresponding to how many beats does each\n// not last.\n// Here is a legend:\n// 'o' - whole note, lasts four beats\n// 'o|' - half note, lasts two beats\n// '.|' - quater note, lasts one beat\n// >>> parse_music(\"o o| .| o| o| .| .| .| .| o o\")\n// [4, 2, 1, 2, 2, 1, 1, 1, 1, 4, 4]\nfunction parse_music(music_string: string): number[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_17_parse_music.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = parse_music;\n  assert.deepEqual(candidate(\"\"),[]);\n  assert.deepEqual(candidate(\"o o o o\"),[4, 4, 4, 4]);\n  assert.deepEqual(candidate(\".| .| .| .|\"),[1, 1, 1, 1]);\n  assert.deepEqual(candidate(\"o| o| .| .| o o o o\"),[2, 2, 1, 1, 4, 4, 4, 4]);\n  assert.deepEqual(candidate(\"o| .| o| .| o o| o o|\"),[2, 1, 2, 1, 4, 2, 4, 2]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_18_how_many_times",
+      "language": "ts",
+      "prompt": "//Find how many times a given substring can be found in the original string. Count overlaping cases.\n// >>> how_many_times(\"\", \"a\")\n// 0\n// >>> how_many_times(\"aaa\", \"a\")\n// 3\n// >>> how_many_times(\"aaaa\", \"aa\")\n// 3\nfunction how_many_times(string: string, substring: string): number {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_18_how_many_times.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = how_many_times;\n  assert.deepEqual(candidate(\"\", \"x\"),0);\n  assert.deepEqual(candidate(\"xyxyxyx\", \"x\"),4);\n  assert.deepEqual(candidate(\"cacacacac\", \"cac\"),4);\n  assert.deepEqual(candidate(\"john doe\", \"john\"),1);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_19_sort_numbers",
+      "language": "ts",
+      "prompt": "//Input is a space-delimited string of numberals from 'zero' to 'nine'.\n// Valid choices are 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight' and 'nine'.\n// Return the string with numbers sorted from smallest to largest\n// >>> sort_numbers(\"three one five\")\n// \"one three five\"\nfunction sort_numbers(numbers: string): string {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_19_sort_numbers.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = sort_numbers;\n  assert.deepEqual(candidate(\"\"),\"\");\n  assert.deepEqual(candidate(\"three\"),\"three\");\n  assert.deepEqual(candidate(\"three five nine\"),\"three five nine\");\n  assert.deepEqual(candidate(\"five zero four seven nine eight\"),\"zero four five seven eight nine\");\n  assert.deepEqual(candidate(\"six five four three two one zero\"),\"zero one two three four five six\");\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_20_find_closest_elements",
+      "language": "ts",
+      "prompt": "//From a supplied array of numbers (of length at least two) select and return two that are the closest to each\n// other and return them in order (smaller number, larger number).\n// >>> find_closest_elements([1.0, 2.0, 3.0, 4.0, 5.0, 2.2])\n// [2.0, 2.2]\n// >>> find_closest_elements([1.0, 2.0, 3.0, 4.0, 5.0, 2.0])\n// [2.0, 2.0]\nfunction find_closest_elements(numbers: number[]): [number, number] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_20_find_closest_elements.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = find_closest_elements;\n  assert.deepEqual(candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2]),[3.9, 4.0]);\n  assert.deepEqual(candidate([1.0, 2.0, 5.9, 4.0, 5.0]),[5.0, 5.9]);\n  assert.deepEqual(candidate([1.0, 2.0, 3.0, 4.0, 5.0, 2.2]),[2.0, 2.2]);\n  assert.deepEqual(candidate([1.0, 2.0, 3.0, 4.0, 5.0, 2.0]),[2.0, 2.0]);\n  assert.deepEqual(candidate([1.1, 2.2, 3.1, 4.1, 5.1]),[2.2, 3.1]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_21_rescale_to_unit",
+      "language": "ts",
+      "prompt": "//Given array of numbers (of at least two elements), apply a linear transform to that array,\n// such that the smallest number will become 0 and the largest will become 1\n// >>> rescale_to_unit([1.0, 2.0, 3.0, 4.0, 5.0])\n// [0.0, 0.25, 0.5, 0.75, 1.0]\nfunction rescale_to_unit(numbers: number[]): number[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_21_rescale_to_unit.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = rescale_to_unit;\n  assert.deepEqual(candidate([2.0, 49.9]),[0.0, 1.0]);\n  assert.deepEqual(candidate([100.0, 49.9]),[1.0, 0.0]);\n  assert.deepEqual(candidate([1.0, 2.0, 3.0, 4.0, 5.0]),[0.0, 0.25, 0.5, 0.75, 1.0]);\n  assert.deepEqual(candidate([2.0, 1.0, 5.0, 3.0, 4.0]),[0.25, 0.0, 1.0, 0.5, 0.75]);\n  assert.deepEqual(candidate([12.0, 11.0, 15.0, 13.0, 14.0]),[0.25, 0.0, 1.0, 0.5, 0.75]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_22_filter_integers",
+      "language": "ts",
+      "prompt": "//Filter given array of any tsthon values only for integers\n// >>> filter_integers([\"a\", 3.14, 5])\n// [5]\n// >>> filter_integers([1, 2, 3, \"abc\", {}, []])\n// [1, 2, 3]\nfunction filter_integers(values: any[]): number[] {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_22_filter_integers.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = filter_integers;\n  assert.deepEqual(candidate([]),[]);\n  assert.deepEqual(candidate([4, {}, [], 23.2, 9, \"adasd\"]),[4, 9]);\n  assert.deepEqual(candidate([3, \"c\", 3, 3, \"a\", \"b\"]),[3, 3, 3]);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_23_strlen",
+      "language": "ts",
+      "prompt": "//Return length of given string\n// >>> strlen(\"\")\n// 0\n// >>> strlen(\"abc\")\n// 3\nfunction strlen(string: string): number {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_23_strlen.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = strlen;\n  assert.deepEqual(candidate(\"\"),0);\n  assert.deepEqual(candidate(\"x\"),1);\n  assert.deepEqual(candidate(\"asdasnakj\"),9);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    },
+    {
+      "name": "HumanEval_24_largest_divisor",
+      "language": "ts",
+      "prompt": "//For a given number n, find the largest number that divides n evenly, smaller than n\n// >>> largest_divisor(15)\n// 5\nfunction largest_divisor(n: number): number {\n",
+      "doctests": "transform",
+      "original": "/Users/arjun/repos/nuprl/MultiPL-E/datasets/../datasets/originals-with-cleaned-doctests/HumanEval_24_largest_divisor.py",
+      "prompt_terminology": "reworded",
+      "tests": "declare var require: any;\nconst assert = require('node:assert');\n\n\nfunction test() {\n  let candidate = largest_divisor;\n  assert.deepEqual(candidate(3),1);\n  assert.deepEqual(candidate(7),1);\n  assert.deepEqual(candidate(10),5);\n  assert.deepEqual(candidate(100),50);\n  assert.deepEqual(candidate(49),7);\n}\n\ntest();",
+      "stop_tokens": [
+        "\nfunction ",
+        "\n/*",
+        "\n//",
+        "\nclass"
+      ]
+    }
+  ]
+}

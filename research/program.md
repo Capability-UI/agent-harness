@@ -14,6 +14,10 @@ only when the score strictly improves, otherwise reverts it.
 - `humaneval` — the real HumanEval benchmark (`openai/openai_humaneval`), cached in
   `research/eval/data/humaneval.json` and graded by its official hidden unit tests
   via `python3`. Size via `HUMANEVAL_N`.
+- `humanevalplus` — HumanEval+ (`evalplus/humanevalplus`), the same problems with
+  far stricter EvalPlus tests (python3 + numpy). Size via `HUMANEVALPLUS_N`.
+- `multiplts` — MultiPL-E HumanEval translated to TypeScript (`nuprl/MultiPL-E`,
+  `humaneval-ts`), graded natively with `tsx`. Size via `MULTIPL_TS_N`.
 
 ## Metric (single source of truth)
 `research/eval/run.mjs` runs the selected battery through the real harness `run`

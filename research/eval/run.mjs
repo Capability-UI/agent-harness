@@ -8,7 +8,13 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-const ALLOWED_BATTERIES = { battery: './battery.mjs', hard: './hard.mjs', humaneval: './humaneval.mjs' };
+const ALLOWED_BATTERIES = {
+  battery: './battery.mjs',
+  hard: './hard.mjs',
+  humaneval: './humaneval.mjs',
+  humanevalplus: './humanevalplus.mjs',
+  multiplts: './multipl_ts.mjs',
+};
 const batteryKey = process.env.EVAL_BATTERY ?? 'battery';
 const batterySpec = ALLOWED_BATTERIES[batteryKey];
 if (!batterySpec) {
