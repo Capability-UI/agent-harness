@@ -1,0 +1,6 @@
+iter	target	build_tests	passes	totalTurns	decision
+0	(baseline)	ok	4	22	baseline
+1	src/loop.ts	ok	4	20	accept
+2	src/tools.ts	ok	4	21	revert
+3	src/context.ts	ok	3	19	revert
+4	src/provider.ts	ok	4	18	accept
