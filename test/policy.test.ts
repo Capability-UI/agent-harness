@@ -57,3 +57,22 @@ test('project lists the ACI tool set', async () => {
     assert.ok(ids.includes(required), required);
   }
 });
+
+test('coding capabilities carry meaningful tool descriptions and argument docs', async () => {
+  const { cup, coder } = await setup();
+  const view = await cup.project({ subject: coder, goal: 'code', context: { purpose: 'coding' } });
+  for (const capability of view.capabilities) {
+    assert.ok(
+      capability.description && capability.description.length > 20,
+      `${capability.id} should have a descriptive tool description`,
+    );
+    assert.notEqual(
+      capability.description,
+      `${capability.id} (${capability.risk} risk)`,
+      `${capability.id} should not use the bare fallback description`,
+    );
+  }
+  const edit = view.capabilities.find(capability => capability.id === 'workspace.edit');
+  const props = (edit?.inputSchema as { properties?: Record<string, { description?: string }> }).properties ?? {};
+  assert.ok(props.oldString?.description, 'workspace.edit oldString should document verbatim matching');
+});

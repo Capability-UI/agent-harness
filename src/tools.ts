@@ -22,6 +22,7 @@ function str(input: Record<string, unknown>, key: string): string {
 }
 
 function capabilityBase(id: string, options: {
+  description: string;
   risk: Capability['risk'];
   sideEffects: string[];
   reversibility: Capability['reversibility'];
@@ -44,10 +45,15 @@ function capabilityBase(id: string, options: {
 export function codingCapabilities(workspace: Workspace): Capability[] {
   return [
     capabilityBase('workspace.read', {
+      description: 'Read a UTF-8 text file from the workspace and return its contents. Use before editing to see exact text.',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',
-      inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      inputSchema: {
+        type: 'object',
+        required: ['path'],
+        properties: { path: { type: 'string', description: 'Workspace-relative path to the file to read, e.g. src/index.ts.' } },
+      },
       handler: async (input: unknown, context: ExecutionContext) => {
         const path = str(asRecord(input), 'path');
         const content = await workspace.readText(path);
@@ -55,13 +61,17 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('workspace.write', {
+      description: 'Create or overwrite a workspace file with the given content. Overwrites the whole file; prefer workspace.edit for surgical changes to an existing file.',
       risk: 'medium',
       sideEffects: ['filesystem_write'],
       reversibility: 'partially_reversible',
       inputSchema: {
         type: 'object',
         required: ['path', 'content'],
-        properties: { path: { type: 'string' }, content: { type: 'string' } },
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path to write; parent directories are created as needed.' },
+          content: { type: 'string', description: 'Full file content to write.' },
+        },
       },
       handler: async (input: unknown) => {
         const rec = asRecord(input);
@@ -69,6 +79,7 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('workspace.edit', {
+      description: 'Replace one exact occurrence of oldString with newString in a file. oldString must match the current file text verbatim (including whitespace) and be unique; read the file first to copy it exactly.',
       risk: 'medium',
       sideEffects: ['filesystem_write'],
       reversibility: 'partially_reversible',
@@ -76,9 +87,9 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
         type: 'object',
         required: ['path', 'oldString', 'newString'],
         properties: {
-          path: { type: 'string' },
-          oldString: { type: 'string' },
-          newString: { type: 'string' },
+          path: { type: 'string', description: 'Workspace-relative path to the file to edit.' },
+          oldString: { type: 'string', description: 'Exact text to find, matched verbatim; must be unique in the file.' },
+          newString: { type: 'string', description: 'Replacement text for the single matched occurrence.' },
         },
       },
       handler: async (input: unknown) => {
@@ -87,23 +98,32 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('workspace.glob', {
-      risk: 'low',
-      sideEffects: [],
-      reversibility: 'reversible',
-      inputSchema: { type: 'object', required: ['pattern'], properties: { pattern: { type: 'string' } } },
-      handler: async (input: unknown) => {
-        const pattern = str(asRecord(input), 'pattern');
-        return { pattern, files: await globWorkspace(workspace, pattern) };
-      },
-    }),
-    capabilityBase('workspace.grep', {
+      description: 'List workspace files matching a glob pattern. Use to discover files by name or extension.',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',
       inputSchema: {
         type: 'object',
         required: ['pattern'],
-        properties: { path: { type: 'string' }, pattern: { type: 'string' } },
+        properties: { pattern: { type: 'string', description: 'Glob pattern relative to the workspace root, e.g. src/**/*.ts.' } },
+      },
+      handler: async (input: unknown) => {
+        const pattern = str(asRecord(input), 'pattern');
+        return { pattern, files: await globWorkspace(workspace, pattern) };
+      },
+    }),
+    capabilityBase('workspace.grep', {
+      description: 'Search workspace file contents for a regular expression and return matching lines. Use to locate code before reading or editing.',
+      risk: 'low',
+      sideEffects: [],
+      reversibility: 'reversible',
+      inputSchema: {
+        type: 'object',
+        required: ['pattern'],
+        properties: {
+          pattern: { type: 'string', description: 'Regular expression to search for in file contents.' },
+          path: { type: 'string', description: 'Optional workspace-relative file or directory to limit the search; defaults to the whole workspace.' },
+        },
       },
       handler: async (input: unknown, context: ExecutionContext) => {
         const rec = asRecord(input);
@@ -113,10 +133,15 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('workspace.bash', {
+      description: 'Run a shell command from the workspace root and return its stdout, stderr, and exit code. Use for building, running tests, or inspecting the environment.',
       risk: 'high',
       sideEffects: ['process_spawn'],
       reversibility: 'irreversible',
-      inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } },
+      inputSchema: {
+        type: 'object',
+        required: ['command'],
+        properties: { command: { type: 'string', description: 'Shell command to execute, e.g. "npm test".' } },
+      },
       handler: async (input: unknown, context: ExecutionContext) => {
         const result = await runBash(workspace, str(asRecord(input), 'command'));
         const observation = await formatBashObservation(workspace, result, `bash-${context.requestId}`);
@@ -124,6 +149,7 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('harness.memory.read', {
+      description: 'Read the harness state: AGENTS.md, saved progress notes, skills catalog, and feature list. Call early to recover context.',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',
@@ -131,10 +157,15 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       handler: async () => loadHarnessState(workspace),
     }),
     capabilityBase('harness.memory.append_progress', {
+      description: 'Append a short progress note to durable harness memory so later turns retain what was done and learned.',
       risk: 'low',
       sideEffects: ['filesystem_write'],
       reversibility: 'partially_reversible',
-      inputSchema: { type: 'object', required: ['text'], properties: { text: { type: 'string' } } },
+      inputSchema: {
+        type: 'object',
+        required: ['text'],
+        properties: { text: { type: 'string', description: 'Progress note to append to memory.' } },
+      },
       handler: async (input: unknown) => {
         const path = join(HARNESS_DIR, PROGRESS_FILE);
         const prev = await workspace.readText(path).catch(() => '');
@@ -143,20 +174,30 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('harness.memory.write_json', {
+      description: 'Persist a structured JSON object to harness memory, replacing the previous value. Use for durable structured state.',
       risk: 'medium',
       sideEffects: ['filesystem_write'],
       reversibility: 'partially_reversible',
-      inputSchema: { type: 'object', required: ['value'], properties: { value: { type: 'object' } } },
+      inputSchema: {
+        type: 'object',
+        required: ['value'],
+        properties: { value: { type: 'object', description: 'JSON object to store as the memory value.' } },
+      },
       handler: async (input: unknown) => {
         const value = asRecord(input).value ?? {};
         return workspace.writeText(join(HARNESS_DIR, MEMORY_FILE), `${JSON.stringify(value, null, 2)}\n`);
       },
     }),
     capabilityBase('harness.skill.read', {
+      description: 'Load the full body of a named skill from the skills catalog (names are listed in harness.memory.read).',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',
-      inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } },
+      inputSchema: {
+        type: 'object',
+        required: ['name'],
+        properties: { name: { type: 'string', description: 'Skill name to load, as listed in the skills catalog.' } },
+      },
       handler: async (input: unknown, context: ExecutionContext) => {
         const name = str(asRecord(input), 'name');
         const state = await loadHarnessState(workspace);
@@ -167,6 +208,7 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       },
     }),
     capabilityBase('harness.features.read', {
+      description: 'Read the feature list with pass/fail status. Consult before claiming a feature works.',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',

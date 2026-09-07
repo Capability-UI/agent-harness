@@ -16,7 +16,9 @@ export interface LoopResult {
 function toolsFromView(capabilities: AuthorizedCapability[]): ToolSpec[] {
   return capabilities.map(capability => ({
     name: capability.id,
-    description: `${capability.id} (${capability.risk} risk)`,
+    description: capability.description
+      ? `${capability.description} (${capability.risk} risk)`
+      : `${capability.id} (${capability.risk} risk)`,
     inputSchema: capability.inputSchema,
   }));
 }
