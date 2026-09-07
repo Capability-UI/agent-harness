@@ -84,12 +84,28 @@ export class OpenAiCompatibleModel implements LanguageModel {
   }
 }
 
-export function modelFromEnv(): OpenAiCompatibleModel | undefined {
-  const apiKey = process.env.OPENAI_API_KEY;
+export interface ModelConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
+export function resolveModelConfig(overrides?: Partial<ModelConfig>): ModelConfig | undefined {
+  const apiKey = overrides?.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey) return undefined;
-  return new OpenAiCompatibleModel({
+  return {
     apiKey,
-    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-    model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-  });
+    baseUrl: overrides?.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
+    model: overrides?.model ?? process.env.OPENAI_MODEL ?? DEFAULT_MODEL,
+  };
+}
+
+export function createModel(overrides?: Partial<ModelConfig>): OpenAiCompatibleModel | undefined {
+  const config = resolveModelConfig(overrides);
+  if (!config) return undefined;
+  return new OpenAiCompatibleModel(config);
+}
+
+export function modelFromEnv(): OpenAiCompatibleModel | undefined {
+  return createModel();
 }

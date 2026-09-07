@@ -8,6 +8,24 @@ cd ../agent-harness && npm install && npm run build
 npx harness init --workspace .
 npx harness tools --workspace .
 OPENAI_API_KEY=... npx harness run "fix the failing test" --workspace .
+
+OpenRouter or any OpenAI-compatible API:
+
+```bash
+npx harness run "fix the failing test" --workspace . \
+  --base-url https://openrouter.ai/api/v1 \
+  --api-key "$OPENROUTER_API_KEY" \
+  --model anthropic/claude-sonnet-4
+```
+
+Or set env vars (flags override env):
+
+```bash
+export OPENAI_API_KEY=...
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_MODEL=anthropic/claude-sonnet-4
+npx harness run "fix the failing test" --workspace .
+```
 ```
 
 The `harness` binary is `dist/src/cli.js`. Run `npm run build` after a clean install.

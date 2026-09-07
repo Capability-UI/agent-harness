@@ -14,6 +14,17 @@ npx harness tools --workspace .
 OPENAI_API_KEY=... npx harness run "run the tests" --workspace .
 ```
 
+OpenRouter (or any OpenAI-compatible endpoint):
+
+```bash
+npx harness run "run the tests" --workspace . \
+  --base-url https://openrouter.ai/api/v1 \
+  --api-key "$OPENROUTER_API_KEY" \
+  --model anthropic/claude-sonnet-4
+```
+
+Env vars `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` work the same way. CLI flags override env.
+
 `package.json` depends on `@capability-ui/core` via `file:../Capability-UI`, matching CUP examples. Published consumers should switch that to GitHub Packages `@capability-ui/core@0.2.0`.
 
 ## Layout

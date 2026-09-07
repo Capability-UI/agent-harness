@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { runCli } from '../src/cli.js';
+import { parseHarnessArgv, runCli } from '../src/cli.js';
 import { Workspace } from '../src/workspace.js';
 
 test('tools lists CUP capabilities without a model key', async () => {
@@ -36,5 +36,31 @@ test('run without a key exits 1', async () => {
   const code = await runCli(['run', '--workspace', root, 'do a thing'], text => { out += text; });
   if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
   assert.equal(code, 1);
-  assert.match(out, /OPENAI_API_KEY/);
+  assert.match(out, /API key/);
+});
+
+test('parseHarnessArgv accepts provider flags', () => {
+  const options = parseHarnessArgv([
+    'run',
+    '--base-url',
+    'https://openrouter.ai/api/v1',
+    '--api-key',
+    'or-key',
+    '--model',
+    'anthropic/claude-sonnet-4',
+    'fix tests',
+  ]);
+  assert.equal(options.command, 'run');
+  assert.equal(options.baseUrl, 'https://openrouter.ai/api/v1');
+  assert.equal(options.apiKey, 'or-key');
+  assert.equal(options.model, 'anthropic/claude-sonnet-4');
+  assert.equal(options.prompt, 'fix tests');
+});
+
+test('help documents custom base url', async () => {
+  let out = '';
+  const code = await runCli(['--help'], text => { out += text; });
+  assert.equal(code, 0);
+  assert.match(out, /--base-url/);
+  assert.match(out, /openrouter\.ai/);
 });

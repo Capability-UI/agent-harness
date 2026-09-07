@@ -4,7 +4,7 @@ import { DEFAULT_MAX_TURNS } from './constants.js';
 import { createHarnessCup } from './host.js';
 import { ensureHarnessLayout, loadHarnessState } from './harness-state.js';
 import { runAgentLoop } from './loop.js';
-import { modelFromEnv } from './provider.js';
+import { createModel } from './provider.js';
 import { SessionLog } from './session.js';
 import { Workspace } from './workspace.js';
 
@@ -13,10 +13,13 @@ interface CliOptions {
   prompt: string;
   workspace: string;
   maxTurns: number;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
   help: boolean;
 }
 
-function parseArgv(argv: string[]): CliOptions {
+export function parseHarnessArgv(argv: string[]): CliOptions {
   const options: CliOptions = {
     command: 'run',
     prompt: '',
@@ -37,6 +40,18 @@ function parseArgv(argv: string[]): CliOptions {
       options.maxTurns = Number(argv[++i] ?? DEFAULT_MAX_TURNS);
       continue;
     }
+    if (token === '--api-key') {
+      options.apiKey = argv[++i];
+      continue;
+    }
+    if (token === '--base-url') {
+      options.baseUrl = argv[++i];
+      continue;
+    }
+    if (token === '--model') {
+      options.model = argv[++i];
+      continue;
+    }
     if (!token.startsWith('-') && rest.length === 0 && (token === 'run' || token === 'init' || token === 'tools')) {
       options.command = token;
       continue;
@@ -47,21 +62,36 @@ function parseArgv(argv: string[]): CliOptions {
   return options;
 }
 
-const USAGE = `Usage: harness <run|init|tools> [prompt] [--workspace <dir>] [--max-turns <n>]
+const USAGE = `Usage: harness <run|init|tools> [prompt] [options]
 
 Coding agent CLI. Tools and policy go through Capability UI. The loop, context, and session live here.
 
 Commands:
-  run <prompt>    run the agent (requires OPENAI_API_KEY)
+  run <prompt>    run the agent (requires an API key)
   init            create .harness layout in the workspace
   tools           list CUP-authorized tools for agent:coder
 
-Env:
-  OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL
+Options (run):
+  --workspace <dir>   workspace root (default: cwd)
+  --max-turns <n>       turn budget (default: 40)
+  --api-key <key>       API key (overrides OPENAI_API_KEY)
+  --base-url <url>      OpenAI-compatible API root (overrides OPENAI_BASE_URL)
+  --model <id>          model id (overrides OPENAI_MODEL)
+
+Env (OpenAI-compatible providers, including OpenRouter):
+  OPENAI_API_KEY        default https://api.openai.com/v1 when OPENAI_BASE_URL is unset
+  OPENAI_BASE_URL       e.g. https://openrouter.ai/api/v1
+  OPENAI_MODEL          e.g. anthropic/claude-sonnet-4 on OpenRouter
+
+Example (OpenRouter):
+  harness run "fix tests" \\
+    --base-url https://openrouter.ai/api/v1 \\
+    --api-key "$OPENROUTER_API_KEY" \\
+    --model anthropic/claude-sonnet-4
 `;
 
 export async function runCli(argv: string[], write: (text: string) => void = text => { process.stdout.write(text); }): Promise<number> {
-  const options = parseArgv(argv);
+  const options = parseHarnessArgv(argv);
   if (options.help) {
     write(USAGE);
     return 0;
@@ -90,9 +120,13 @@ export async function runCli(argv: string[], write: (text: string) => void = tex
     write(USAGE);
     return 1;
   }
-  const model = modelFromEnv();
+  const model = createModel({
+    apiKey: options.apiKey,
+    baseUrl: options.baseUrl,
+    model: options.model,
+  });
   if (!model) {
-    write('OPENAI_API_KEY is required for run.\n');
+    write('An API key is required for run (OPENAI_API_KEY or --api-key).\n');
     return 1;
   }
   await ensureHarnessLayout(workspace);
