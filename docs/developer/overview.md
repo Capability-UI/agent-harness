@@ -24,7 +24,7 @@ npx harness run "run the tests" --workspace . \
 
 Env vars `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` work the same way. CLI flags override env.
 
-`package.json` depends on `@capability-ui/core` as a **prebuilt package tarball** vendored at `vendor/capability-ui-core.tgz` (`file:vendor/capability-ui-core.tgz`), so the harness builds standalone with no sibling `../Capability-UI` checkout and without recompiling CUP. Regenerate it with `./scripts/vendor-cup.sh ../Capability-UI` when CUP changes. Registry consumers can instead switch to GitHub Packages `@capability-ui/core@0.2.0` (needs a `read:packages` token).
+`package.json` depends on `@capability-ui/core` as a **pinned git dependency** from the public repo (`git+https://github.com/Capability-UI/Capability-UI.git#<commit>`), so the harness builds standalone with no sibling `../Capability-UI` checkout. npm clones the pinned commit and runs CUP's `prepare` script to build it on install. Bump the SHA to update. (GitHub Packages `@capability-ui/core@0.2.0` remains an option but requires a `read:packages` token even for public packages.)
 
 ## Layout
 

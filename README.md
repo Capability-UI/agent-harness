@@ -19,9 +19,10 @@ context assembly, session log, and the workspace jail.
 - For `harness run`: an API key for an OpenAI-compatible endpoint.
 
 No sibling checkout is required. The CUP kernel (`@capability-ui/core`) is consumed
-as a **prebuilt package** vendored in this repo at `vendor/capability-ui-core.tgz`
-and referenced from `package.json` as `file:vendor/capability-ui-core.tgz`, so a
-plain `npm install` resolves it without building CUP from source.
+directly from the public [`Capability-UI`](https://github.com/Capability-UI/Capability-UI)
+repository as a **pinned git dependency** (`git+https://github.com/Capability-UI/Capability-UI.git#<commit>`).
+On install, npm clones that commit and runs CUP's `prepare` script to build it, so
+`npm install` resolves the package with no sibling and no registry auth.
 
 ## Install & build
 
@@ -29,7 +30,7 @@ The harness builds standalone — no `../Capability-UI` needed:
 
 ```bash
 cd agent-harness
-npm install        # installs the vendored @capability-ui/core package
+npm install        # clones + builds the pinned @capability-ui/core commit
 npm run build
 ```
 
@@ -37,15 +38,14 @@ The CLI binary is `dist/src/cli.js` (exposed as `harness`). Re-run `npm run buil
 after a clean install or any source change. For a no-build dev loop use
 `npm run harness -- <args>` (runs `src/cli.ts` through `tsx`).
 
-### Refreshing the vendored CUP package
+### Updating the pinned CUP version
 
-When `Capability-UI` changes and you want the harness to pick it up, re-pack the
-prebuilt tarball from a sibling checkout (the sibling is needed only for this step,
-never for building or running the harness):
+Bump the commit SHA in the `@capability-ui/core` dependency in `package.json`, then
+`rm -rf node_modules package-lock.json && npm install` to re-pin.
 
-```bash
-./scripts/vendor-cup.sh ../Capability-UI
-```
+> **Note:** npm records the lockfile `resolved` URL for GitHub git dependencies in
+> `git+ssh://` form. If your environment lacks GitHub SSH access, force HTTPS with:
+> `git config --global url."https://github.com/".insteadOf ssh://git@github.com/`
 
 ## Quickstart
 
@@ -212,8 +212,6 @@ under `research/eval/data/` for reproducibility (`research/eval/fetch-benchmark.
 | `src/session.ts` | JSONL session logging. |
 | `src/observations.ts` | Observation capping / artifact spill. |
 | `research/` | Autoresearch loop, evaluators, and benchmark batteries. |
-| `vendor/capability-ui-core.tgz` | Prebuilt `@capability-ui/core` package (the CUP kernel). |
-| `scripts/vendor-cup.sh` | Re-pack the vendored CUP tarball from a sibling checkout. |
 
 ## Testing
 
