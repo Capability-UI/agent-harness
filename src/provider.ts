@@ -18,11 +18,11 @@ export interface LanguageModel {
 
 interface OpenAiToolCall {
   id?: string;
-  function?: { name?: string; arguments?: string };
+  function?: { name?: string; arguments?: unknown };
 }
 
 interface OpenAiMessage {
-  content?: string | null;
+  content?: string | null | Array<{ text?: string | { value?: string } } | string>;
   tool_calls?: OpenAiToolCall[];
 }
 
@@ -62,6 +62,52 @@ export function createToolNameCodec(originalNames: Iterable<string>): ToolNameCo
     toWire: name => toWireMap.get(name) ?? sanitizeToolName(name),
     fromWire: name => fromWireMap.get(name) ?? name,
   };
+}
+
+const MAX_ATTEMPTS = 3;
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_STATUS.has(status);
+}
+
+function normalizeText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (content === null || content === undefined) return '';
+  if (Array.isArray(content)) {
+    let out = '';
+    for (const part of content) {
+      if (typeof part === 'string') {
+        out += part;
+      } else if (part !== null && typeof part === 'object') {
+        const record = part as { text?: unknown };
+        if (typeof record.text === 'string') out += record.text;
+        else if (record.text !== null && typeof record.text === 'object') {
+          const inner = (record.text as { value?: unknown }).value;
+          if (typeof inner === 'string') out += inner;
+        }
+      }
+    }
+    return out;
+  }
+  return '';
+}
+
+function normalizeArguments(args: unknown): string {
+  if (typeof args === 'string') {
+    if (args.trim().length === 0) return '{}';
+    return args;
+  }
+  if (args === null || args === undefined) return '{}';
+  try {
+    return JSON.stringify(args);
+  } catch {
+    return '{}';
+  }
 }
 
 export class OpenAiCompatibleModel implements LanguageModel {
@@ -107,26 +153,47 @@ export class OpenAiCompatibleModel implements LanguageModel {
         function: { name: codec.toWire(tool.name), description: tool.description, parameters: tool.inputSchema },
       })),
     };
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${this.options.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`MODEL_HTTP_${response.status}: ${detail.slice(0, 500)}`);
+    const payload = JSON.stringify(body);
+    let lastError: unknown;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${this.options.apiKey}`,
+          },
+          body: payload,
+        });
+      } catch (error) {
+        lastError = error;
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await sleep(150 * 2 ** attempt);
+          continue;
+        }
+        throw error;
+      }
+      if (!response.ok) {
+        const detail = await response.text();
+        const error = new Error(`MODEL_HTTP_${response.status}: ${detail.slice(0, 500)}`);
+        lastError = error;
+        if (isRetryableStatus(response.status) && attempt < MAX_ATTEMPTS - 1) {
+          await sleep(150 * 2 ** attempt);
+          continue;
+        }
+        throw error;
+      }
+      const json = await response.json() as { choices?: Array<{ message?: OpenAiMessage }> };
+      const message = json.choices?.[0]?.message;
+      const toolCalls: ToolCall[] = (message?.tool_calls ?? []).map((call, index) => ({
+        id: call.id ?? `call_${index}`,
+        name: codec.fromWire(typeof call.function?.name === 'string' ? call.function.name : ''),
+        arguments: normalizeArguments(call.function?.arguments),
+      }));
+      return { text: normalizeText(message?.content), toolCalls };
     }
-    const json = await response.json() as { choices?: Array<{ message?: OpenAiMessage }> };
-    const message = json.choices?.[0]?.message;
-    const toolCalls: ToolCall[] = (message?.tool_calls ?? []).map((call, index) => ({
-      id: call.id ?? `call_${index}`,
-      name: codec.fromWire(call.function?.name ?? ''),
-      arguments: call.function?.arguments ?? '{}',
-    }));
-    return { text: message?.content ?? '', toolCalls };
+    throw lastError instanceof Error ? lastError : new Error('MODEL_HTTP_UNKNOWN: request failed');
   }
 }
 
