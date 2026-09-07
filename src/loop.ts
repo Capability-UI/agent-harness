@@ -13,14 +13,37 @@ export interface LoopResult {
   sessionId: string;
 }
 
+function argHint(inputSchema: unknown): string {
+  if (!inputSchema || typeof inputSchema !== 'object') return '';
+  const schema = inputSchema as {
+    properties?: Record<string, { type?: unknown; description?: unknown }>;
+    required?: unknown;
+  };
+  if (!schema.properties || typeof schema.properties !== 'object') return '';
+  const required = new Set(
+    Array.isArray(schema.required) ? (schema.required as unknown[]).map(String) : [],
+  );
+  const parts = Object.entries(schema.properties).map(([key, prop]) => {
+    const type =
+      prop && typeof prop === 'object' && typeof prop.type === 'string' ? prop.type : 'value';
+    return required.has(key) ? `${key} (required, ${type})` : `${key} (${type})`;
+  });
+  if (parts.length === 0) return '';
+  return `Args: { ${parts.join(', ')} }. Call with a single valid JSON object.`;
+}
+
 function toolsFromView(capabilities: AuthorizedCapability[]): ToolSpec[] {
-  return capabilities.map(capability => ({
-    name: capability.id,
-    description: capability.description
+  return capabilities.map(capability => {
+    const base = capability.description
       ? `${capability.description} (${capability.risk} risk)`
-      : `${capability.id} (${capability.risk} risk)`,
-    inputSchema: capability.inputSchema,
-  }));
+      : `${capability.id} (${capability.risk} risk)`;
+    const hint = argHint(capability.inputSchema);
+    return {
+      name: capability.id,
+      description: hint ? `${base}. ${hint}` : base,
+      inputSchema: capability.inputSchema,
+    };
+  });
 }
 
 function parseArgs(raw: string): unknown {
