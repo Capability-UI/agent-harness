@@ -223,6 +223,7 @@ npm run check   # type-check only (tsc --noEmit)
 
 ## Docs
 
+- Worked example (how the agent works & evolves, with diagrams): [docs/agent-via-cup.md](docs/agent-via-cup.md)
 - Developer overview: [docs/developer/overview.md](docs/developer/overview.md)
 - Research synthesis: [docs/llm-agent-harness-research.md](docs/llm-agent-harness-research.md)
 - Plan: [docs/plans/2026-09-07-001-plan-capability-ui-harness.md](docs/plans/2026-09-07-001-plan-capability-ui-harness.md)
