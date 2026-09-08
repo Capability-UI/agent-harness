@@ -599,6 +599,7 @@ Do not fork policy into `SYSTEM.md`. The prompt may describe the profile in word
 | File | Cases |
 | --- | --- |
 | `test/resources.test.ts` | write creates `ws.file:*`; second write versions; stranger cannot read; child cannot read ungranted path; default no delete. |
+| `test/catalog.test.ts` | jsonl roundtrip; grant compile; boot rebuilds policies from grants + resource owners if policies.jsonl is missing. |
 | `test/grants.test.ts` | profile subset of parent; escalate denied; prefix condition; compile/replay from jsonl. |
 | `test/subagent.test.ts` | define persists SYSTEM.md; second session `--agent` loads same prompt and memory isolation; spawn nested loop with fake model; parent does not receive child tool transcript. |
 | `test/policy.test.ts` | extend: actor-specific `project()` tool sets; `agent:stranger` still denied. |
