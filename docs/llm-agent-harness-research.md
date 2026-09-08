@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-07  
 **Repo:** agent-harness  
-**Purpose:** Distill late-2025 and 2026 research on LLM agent harnesses, then name what this repo should inherit versus invent. Implementation design lives in [plans/2026-09-07-001-plan-capability-ui-harness.md](plans/2026-09-07-001-plan-capability-ui-harness.md).
+**Purpose:** Distill late-2025 and 2026 research on LLM agent harnesses, then name what this repo should inherit versus invent. Implementation design lives in [plans/2026-09-07-001-plan-capability-ui-harness.md](plans/2026-09-07-001-plan-capability-ui-harness.md). Subagents, created work as CUP resources, and CUP as the worker operating model: [plans/2026-09-08-001-cup-resources-and-subagents.md](plans/2026-09-08-001-cup-resources-and-subagents.md).
 
 This note treats the harness as a first-class runtime, not as a prompt wrapper. Capability UI Protocol (CUP) is the intended kernel for tools, authorization, and authorized views. CUP is not an agent loop. Two 2026 results change what that loop should look like:
 

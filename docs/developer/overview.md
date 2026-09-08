@@ -39,6 +39,13 @@ Env vars `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` work the same w
 
 Harness state lives under `.harness/` (`prompt.md`, `progress.md`, `memory.json`, `skills/`, `agents/`). There is no automatic Continual Harness Refiner in v1. The agent may append progress and rewrite memory JSON through CUP.
 
+## Plans
+
+- v1 harness: [plans/2026-09-07-001-plan-capability-ui-harness.md](../plans/2026-09-07-001-plan-capability-ui-harness.md)
+- CUP resources, subagents, and the agent protocol: [plans/2026-09-08-001-cup-resources-and-subagents.md](../plans/2026-09-08-001-cup-resources-and-subagents.md)
+
+v1 uses a single `agent:coder` subject and disk files that are not CUP resources. The 2026-09-08 plan treats created work as CUP resources with strict policies, persists subagent system prompts, isolates memory per subject, and uses CUP grants as the operating model for what a subagent may do.
+
 ## Tests
 
 ```bash
