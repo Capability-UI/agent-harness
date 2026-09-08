@@ -10,6 +10,7 @@ This plan does three things:
 1. Treat **every artifact an agent creates** as a CUP resource with **strict, deny-by-default policies**.
 2. Make **subagents first-class CUP subjects**: saved system prompts, **subject-specific memory**, and **CUP-managed capability and resource grants**. Subagents are reused by launching new sessions as the same subject, not by pasting a prompt into the parent.
 3. State how the **agent protocol uses CUP** as an **operating model** for giving any worker (root coder or subagent) a specific, attenuated set of capabilities.
+4. Define the **data architecture**: catalog vs bodies vs logs, record shapes, ids, and how a standing grant compiles into CUP policies.
 
 v1 already routes tool calls through `cup.execute` for a single `agent:coder` subject. Files, skills, memories, and `.harness/agents/*.md` are still **disk objects**, not CUP resources. Sub-agent specs are listed in the prompt and cannot spawn. Memory is shared. This plan closes that gap.
 
@@ -83,6 +84,306 @@ flowchart TB
 
 This is the same split already described in [agent-via-cup.md](../agent-via-cup.md), extended from one worker to many.
 
+## Data architecture
+
+Three stores, one in-memory kernel. CUP objects are the **authorization schema**. Disk is the **system of record**. The process-local `CapabilityUI` instance is a **compiled cache** rebuilt on every `harness` invocation.
+
+```mermaid
+flowchart TB
+  subgraph Durable["Durable: workspace disk"]
+    Cat["Catalog .harness/cup/*.jsonl"]
+    Bodies["Bodies: files, prompts, memory"]
+    Logs["Logs: sessions + receipts"]
+  end
+
+  subgraph Runtime["Process: compiled CUP"]
+    CUP["CapabilityUI"]
+    Subj["Subjects"]
+    Res["Resources + adapters"]
+    Cap["Capabilities + handlers"]
+    Pol["Policies + named conditions"]
+  end
+
+  subgraph Ephemeral["Ephemeral: one session"]
+    View["AuthorizedView"]
+    Msgs["Chat messages"]
+    Del["In-flight DelegationGrant"]
+  end
+
+  Cat -->|replay on boot| CUP
+  Bodies -->|adapters read/write| CUP
+  CUP --> View
+  View --> Msgs
+  CUP --> Logs
+  Del -.->|expires at spawn end| CUP
+```
+
+| Store | What it holds | Lifetime |
+| --- | --- | --- |
+| Catalog | Resource records, standing policies, standing grants, known subjects | Survives process exit. Source of truth for *who may do what*. |
+| Bodies | File bytes, `SYSTEM.md`, `memory.json`, `progress.md`, skill markdown | Survives process exit. Source of truth for *content*. Catalog rows point at paths; they do not embed bodies. |
+| Logs | CUP receipts, session jsonl | Append-only. Source of truth for *what happened*. |
+| Compiled CUP | `register()` / `policy.allow()` / handlers | One process. Rebuilt from catalog + code. Never the only copy of policy. |
+| Session projection | `project()` view, model messages, spawn delegations | One session (delegations die when spawn returns). |
+
+Postgres is not required. The catalog jsonl files are the same facts CUP's SQL sketch would store (`cup_resources`, `cup_policies`, `cup_delegation_grants`, `cup_subjects`, `cup_receipts`). A later host can swap jsonl for that schema without changing resource ids.
+
+### Entity relationship
+
+```mermaid
+erDiagram
+  SUBJECT ||--o{ POLICY : "principal"
+  SUBJECT ||--o{ STANDING_GRANT : "recipient"
+  SUBJECT ||--o{ RESOURCE : "owns"
+  SUBJECT ||--o{ RECEIPT : "actor"
+  SUBJECT ||--o{ SESSION : "runs"
+  RESOURCE ||--o{ POLICY : "protects"
+  RESOURCE ||--o| CAPABILITY : "may be"
+  RESOURCE ||--o{ STANDING_GRANT : "listed in"
+  STANDING_GRANT ||--|{ POLICY : "compiles to"
+  SUBAGENT ||--|| SUBJECT : "is"
+  SUBAGENT ||--|| RESOURCE : "harness.subagent.slug"
+  SUBAGENT ||--|| STANDING_GRANT : "has"
+  SUBAGENT ||--|| MEMORY : "owns"
+  SUBAGENT ||--|| PROMPT : "SYSTEM.md"
+  SESSION ||--o{ RECEIPT : "references"
+  SESSION ||--o{ DELEGATION : "optional extra rights"
+  DELEGATION }o--|| SUBJECT : "from / to"
+  DELEGATION }o--|| CAPABILITY : "lends"
+  BODY ||--|| RESOURCE : "path in metadata"
+```
+
+**Subject** is not a login table. It is a stable id (`agent:coder`, `agent:<slug>`) plus attributes (`role`, `slug`, `workspaceId`). Known subjects are listed in the catalog so boot can reconstruct them. The CLI operator is not a CUP subject.
+
+**Resource** is the noun catalog row. **Body** is the file the row names. Deleting a body without tombstoning the row (or the reverse) is a host bug; writes must update both in one handler.
+
+**Standing grant** is the *intent* ("reviewer may read-only under `src/auth/`"). **Policy** rows are the *compiled* CUP allows. Do not edit policy jsonl by hand as the primary API; edit the grant and recompile. Create-template policies (owner read/update on a new `ws.file:*`) are compiled from the create event, not from a subagent grant.
+
+**Capability** handlers live in TypeScript (`src/tools.ts`). Catalog stores only capability *ids* the grant refers to. Boot reattaches handlers from code.
+
+### On-disk tree
+
+```
+<workspace>/
+  AGENTS.md                          # repo map (not a CUP resource until imported)
+  src/...                            # bodies; ws.file:* rows appear after create/touch
+  .harness/
+    prompt.md                        # body for harness.prompt.agent:coder
+    progress.md                      # body for harness.progress.agent:coder
+    memory.json                      # body for harness.memory.agent:coder
+    feature_list.json
+    skills/<name>/SKILL.md           # body for harness.skill.<name>
+    artifacts/<id>                   # body for harness.artifact.<id>
+    sessions/<uuid>.jsonl            # loop events; pairs with harness.session.<uuid>
+    agents/<slug>/
+      SYSTEM.md                      # reusable system prompt
+      spec.md                        # human-readable spec + frontmatter
+      grant.json                     # copy of standing grant for that slug
+      memory.json
+      progress.md
+    cup/
+      subjects.jsonl                 # known workers
+      resources.jsonl                # noun catalog (no bytes, no functions)
+      grants.jsonl                   # standing grants (intent)
+      policies.jsonl                 # compiled allow/deny (condition ids, not JS)
+      receipts.jsonl                 # CUP audit
+```
+
+`agents/<slug>/grant.json` is a convenience replica of the grants.jsonl record for that slug (readable next to the prompt). `grants.jsonl` remains canonical for boot.
+
+### Catalog record shapes
+
+**Subject** (`subjects.jsonl`):
+
+```json
+{
+  "id": "agent:reviewer",
+  "type": "agent",
+  "authenticated": true,
+  "attributes": { "role": "subagent", "slug": "reviewer", "workspaceId": "<root>" }
+}
+```
+
+Root coder is seeded on `init`: `{ "id": "agent:coder", "type": "agent", "attributes": { "role": "coder" } }`.
+
+**Resource** (`resources.jsonl`):
+
+```json
+{
+  "id": "ws.file:src/auth/index.ts",
+  "type": "data",
+  "version": "3",
+  "sensitivity": "confidential",
+  "owner": "agent:reviewer",
+  "description": "Workspace file src/auth/index.ts",
+  "schema": { "type": "object", "properties": { "path": { "type": "string" }, "bytes": { "type": "integer" } } },
+  "metadata": {
+    "kind": "workspace_file",
+    "path": "src/auth/index.ts",
+    "createdBy": "agent:reviewer",
+    "createdAt": "2026-09-08T00:00:00.000Z",
+    "updatedAt": "2026-09-08T00:01:00.000Z",
+    "shareCreatesWithParent": true
+  }
+}
+```
+
+`id` is stable. `version` is a monotonic string bumped on update (file content hash optional in metadata later). `read` adapters are **not** stored; boot binds `metadata.path` to `workspace.readText`.
+
+Kind values: `workspace_file`, `skill`, `memory`, `progress`, `prompt`, `subagent`, `session`, `artifact`, `feature_list`.
+
+**Standing grant** (`grants.jsonl`):
+
+```json
+{
+  "id": "grant-agent:reviewer",
+  "subjectId": "agent:reviewer",
+  "subagentResourceId": "harness.subagent.reviewer",
+  "issuedBy": "agent:coder",
+  "issuedAt": "2026-09-08T00:00:00.000Z",
+  "expiresAt": null,
+  "purpose": "review",
+  "profile": "read-only",
+  "capabilities": ["workspace.read", "workspace.glob", "workspace.grep", "harness.skill.read", "harness.memory.read"],
+  "pathPrefixes": ["src/auth/"],
+  "resourceIds": ["harness.memory.agent:reviewer", "harness.progress.agent:reviewer", "harness.prompt.agent:reviewer"],
+  "shareCreatesWithParent": { "workspace_file": true, "memory": false, "progress": false }
+}
+```
+
+This document is the operating assignment. It does not contain handler code.
+
+**Compiled policy** (`policies.jsonl`):
+
+```json
+{
+  "id": "allow-agent:reviewer-execute-workspace.read",
+  "effect": "allow",
+  "principal": { "id": "agent:reviewer" },
+  "operation": ["discover", "inspect", "execute"],
+  "resource": { "id": "workspace.read" },
+  "priority": 20,
+  "purpose": "review",
+  "conditionIds": ["path_prefix"],
+  "conditionParams": { "grantId": "grant-agent:reviewer" }
+}
+```
+
+Create-template example for a new file:
+
+```json
+{
+  "id": "allow-agent:reviewer-read-ws.file:src/auth/index.ts",
+  "effect": "allow",
+  "principal": { "id": "agent:reviewer" },
+  "operation": ["discover", "inspect", "read", "update"],
+  "resource": { "id": "ws.file:src/auth/index.ts" },
+  "priority": 30
+}
+```
+
+`conditionIds` map to host functions at boot (`path_prefix`, `resource_in_grant`, `actor_owns`). Never serialize a JavaScript function. On load, the compiler attaches `Policy.conditions` from those ids plus `conditionParams`.
+
+**Receipt** (`receipts.jsonl`): CUP `Receipt` as JSON (id, status, actor, capability, `resourceRefs`, inputHash, decision, resultSummary, createdAt). Session jsonl stores loop events with `receiptId` so the two logs join.
+
+**Session event** (existing `.harness/sessions/*.jsonl`): user / assistant / tool / denied / stop. Add `subjectId` on every event so child runs are attributable. Child sessions are separate files (`harness.session.<child-uuid>`), not mixed into the parent jsonl.
+
+### Id scheme
+
+| Id | Meaning |
+| --- | --- |
+| `agent:coder` | Root worker subject |
+| `agent:<slug>` | Subagent subject. Slug is `[a-z0-9-]{1,64}` |
+| `workspace.read` (etc.) | Capability ids (code-defined) |
+| `ws.file:<posix-rel-path>` | Created or imported workspace file. Path uses `/`, no `..` |
+| `harness.subagent.<slug>` | Subagent resource (`type: agent`) |
+| `harness.prompt.<subjectId>` | System prompt body |
+| `harness.memory.<subjectId>` | Structured memory |
+| `harness.progress.<subjectId>` | Progress notes |
+| `harness.skill.<name>` | Skill markdown |
+| `harness.session.<uuid>` | One run's event log |
+| `harness.artifact.<id>` | Spilled observation |
+| `grant-<subjectId>` | Standing grant id |
+| `allow-<principal>-<op>-<resourceId>` | Policy id convention (unique; collisions get a suffix) |
+
+`<subjectId>` in resource ids keeps colons (`harness.memory.agent:reviewer`). Parsers split on the kind prefix, not on every colon.
+
+### How a grant becomes a CUP view
+
+```mermaid
+sequenceDiagram
+  participant G as grant.jsonl
+  participant C as compiler
+  participant P as policies.jsonl
+  participant K as CapabilityUI
+  participant V as project()
+
+  G->>C: profile + capabilities + prefixes + resourceIds
+  C->>P: execute allows on listed capabilities
+  C->>P: discover/inspect/read on listed resourceIds
+  C->>P: prefix condition on workspace.* execute
+  C->>K: register resources, allow policies, bind conditions
+  K->>V: AuthorizedView for agent:slug
+```
+
+Root `agent:coder` is a standing grant too (implicit, seeded on init): all ACI + harness capabilities, `pathPrefixes: ["**"]`, plus `delegate` on those capabilities so it can lend session rights. That seed is written as `grant-agent:coder` so the compiler has one code path.
+
+### Write path (create)
+
+```mermaid
+sequenceDiagram
+  participant M as model
+  participant E as cup.execute
+  participant H as workspace.write handler
+  participant FS as body on disk
+  participant Cat as catalog jsonl
+  participant K as CapabilityUI
+
+  M->>E: workspace.write path+content as subject S
+  E->>H: authorized execute
+  H->>H: prefix / resource authorize (create or update)
+  H->>FS: write bytes
+  H->>Cat: upsert resources.jsonl + owner policies
+  H->>K: register / bump version in this process
+  H-->>E: { path, bytes, resourceId }
+  E-->>M: receipt + observation
+```
+
+Memory, skill, and `harness.subagent.define` use the same pattern: body files first (or in the same handler), then catalog upsert, then in-process `register`.
+
+### Read path (two layers)
+
+1. May `S` `execute` `workspace.read`? (capability policy, possibly `path_prefix` condition)
+2. If `ws.file:<path>` exists: may `S` `read` that resource? Else: is `S` root coder, or does a prefix grant cover the path?
+
+`cup.read` on a data resource is the noun-native path. ACI `workspace.read` stays because models already call it; the handler must perform layer 2 so CUP still manages availability.
+
+### What lives where (quick map)
+
+| Concept | Catalog | Body | Log |
+| --- | --- | --- | --- |
+| Subagent persona | `harness.subagent.<slug>` + subject row | `agents/<slug>/SYSTEM.md`, `spec.md` | receipts on define/update |
+| Subagent rights | standing grant + compiled policies | `agents/<slug>/grant.json` replica | receipts on define |
+| Subagent memory | `harness.memory.agent:<slug>` | `agents/<slug>/memory.json` | receipts on write |
+| Created file | `ws.file:<path>` + owner policies | the file | receipts on write/edit |
+| Session | `harness.session.<uuid>` (optional row) | `sessions/<uuid>.jsonl` | that jsonl *is* the log |
+| Tool implementation | capability id in grants | `src/tools.ts` in the harness repo | n/a |
+| Extra spawn rights | not standing | n/a | delegation id on spawn receipt; grant object in memory until spawn returns |
+
+### Boot sequence
+
+1. Open workspace jail.
+2. Ensure `.harness/` layout including `cup/`.
+3. Seed `agent:coder` subject + root grant if missing.
+4. Read jsonl catalogs.
+5. `denyByDefault()`, register code-defined capabilities (handlers).
+6. `register` each catalog resource with a path-bound `read` adapter.
+7. Compile grants whose `policies.jsonl` is stale (grant `issuedAt` newer than policy set); otherwise load policies and attach named conditions.
+8. Construct `subject(actorId, attributes)` for this CLI invocation.
+9. `project` / loop.
+
+If `policies.jsonl` is corrupt, recompile from `grants.jsonl` plus create-template reconstruction from `resources.jsonl` owner fields. Grants + resource owners are sufficient to rebuild policy.
+
 ## How the agent protocol uses CUP
 
 A **session** is: one acting subject, one goal, one turn budget, one jsonl log. The **harness** is a stateless loop over CUP plus `.harness` disk. The **context window** is a projection of the session, not the session itself.
@@ -155,15 +456,7 @@ Metadata to store: `createdBy`, `createdAt`, `path` or `slug`, `sensitivity: con
 
 ### Persistence
 
-CUP's in-memory `CapabilityUI` dies with the process. Persist:
-
-```
-.harness/cup/resources.jsonl    # resource records (no handler functions)
-.harness/cup/policies.jsonl     # allow/deny records (conditions as named ids, not raw JS)
-.harness/cup/grants.jsonl       # subagent grant documents
-```
-
-On `createHarnessCup`, replay these into `cup.register` and `cup.policy.allow`. Named condition ids (`path_prefix`, `resource_in_grant`, `actor_owns`) are implemented in host TypeScript and attached when compiling policies. Do not serialize functions.
+See [Data architecture](#data-architecture). Catalog jsonl is the authorization system of record; bodies stay in ordinary files; the in-process `CapabilityUI` is rebuilt on boot.
 
 ### `workspace.*` vs `cup.read`
 
@@ -289,7 +582,7 @@ Stay in `agent-harness`. Suggested modules:
 | Path | Role |
 | --- | --- |
 | `src/host.ts` | `createHarnessCup(workspace, options?: { actor })`: load catalog, register ACI + subagent capabilities, compile grants, return `{ cup, actor }`. |
-| `src/cup-catalog.ts` | jsonl load/save of resources, policies, grants. |
+| `src/cup-catalog.ts` | jsonl load/save of subjects, resources, grants, policies, receipts; grant compiler. |
 | `src/resources.ts` | id helpers, create-template policies, register-on-write, bash reconciliation. |
 | `src/grants.ts` | profiles, attenuation checks, named conditions, path prefix tests. |
 | `src/subagent.ts` | define, load spec, subject id `agent:<slug>`. |
@@ -318,7 +611,7 @@ Fake model pattern already used in `test/loop.test.ts`.
 
 - [agent-via-cup.md](../agent-via-cup.md): multi-subject protocol, create-on-write, spawn/reuse sequence diagrams.
 - [developer/overview.md](../developer/overview.md): `--agent`, `.harness/cup/`, `.harness/agents/<slug>/`.
-- New [developer/cup-operating-model.md](../developer/cup-operating-model.md): short host guide (this plan's operating-model table, grant compile steps).
+- New [developer/cup-operating-model.md](../developer/cup-operating-model.md): short host guide (operating-model table, data stores, grant compile steps).
 - [2026-09-07-001](2026-09-07-001-plan-capability-ui-harness.md): point v2 sub-agents at this plan.
 - Capability-UI docs (sibling, separate PR if desired): `runtimes/agent-resources.md` and `foundations/mental-model.md` with a "harness operating model" note: subagents are subjects plus grants, not prompt-only personas.
 

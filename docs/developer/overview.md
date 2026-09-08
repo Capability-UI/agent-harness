@@ -44,7 +44,7 @@ Harness state lives under `.harness/` (`prompt.md`, `progress.md`, `memory.json`
 - v1 harness: [plans/2026-09-07-001-plan-capability-ui-harness.md](../plans/2026-09-07-001-plan-capability-ui-harness.md)
 - CUP resources, subagents, and the agent protocol: [plans/2026-09-08-001-cup-resources-and-subagents.md](../plans/2026-09-08-001-cup-resources-and-subagents.md)
 
-v1 uses a single `agent:coder` subject and disk files that are not CUP resources. The 2026-09-08 plan treats created work as CUP resources with strict policies, persists subagent system prompts, isolates memory per subject, and uses CUP grants as the operating model for what a subagent may do.
+v1 uses a single `agent:coder` subject and disk files that are not CUP resources. The 2026-09-08 plan treats created work as CUP resources with strict policies, persists subagent system prompts, isolates memory per subject, and uses CUP grants as the operating model for what a subagent may do. That plan's **Data architecture** section is the map of catalog jsonl, file bodies, and session/receipt logs.
 
 ## Tests
 
