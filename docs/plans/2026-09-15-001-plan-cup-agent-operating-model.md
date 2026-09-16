@@ -46,6 +46,74 @@ CUP core *does* define a persistence seam — the `CupPersistence` and `SqlClien
 
 ---
 
+## Storage layout — where everything lives
+
+Everything is anchored to a **workspace root** (the `--workspace` dir). Legend:
+**[now]** exists today · **[plan]** introduced by this plan.
+
+```text
+<workspace root>/                      # [now] the project; jail for file tools
+├── AGENTS.md                          # [now] injected into the system prompt
+├── skills/                            # [now] repo-level skills (SKILL.md), optional
+├── <project files…>                   # [now] what the agent reads / writes / executes
+└── .harness/                          # [now] harness home (per workspace)
+    ├── prompt.md                      # [now] base system prompt (agent:coder)
+    ├── progress.md                    # [now] durable progress notes (prompt prefix)
+    ├── memory.json                    # [now] structured memory (harness.memory.*)
+    ├── feature_list.json              # [now] feature pass/fail
+    ├── skills/                        # [now] harness-scoped skills (SKILL.md)
+    ├── sessions/<runId>.jsonl         # [now] per-run event log (audit)
+    ├── artifacts/<label>.txt          # [now] spilled tool outputs (>32 KB)
+    ├── agents/                        # subagents
+    │   └── <name>/
+    │       ├── SKILL.md               # [now] read-only spec surfaced in the prompt
+    │       ├── spec.json              # [plan] id, grants, resource scopes, model, spawnableBy
+    │       ├── prompt.md              # [plan] saved subagent system prompt (reused)
+    │       └── memory/                # [plan] subagent-specific state tree
+    │           ├── prompt.md progress.md memory.json feature_list.json
+    │           ├── skills/  sessions/<runId>.jsonl  artifacts/
+    │           └── workspace/         # [plan, optional] jailed subdir for FS-isolated subagents
+    └── cup.db                         # [plan] SQLite: the durable CUP model
+```
+
+```mermaid
+flowchart TB
+  WS["Workspace root<br/>(file-tool jail)"]
+  WS --> AGM["AGENTS.md"]
+  WS --> RSK["skills/ (repo skills)"]
+  WS --> PROJ["project files<br/>agent reads / writes / executes"]
+  WS --> H[".harness/ (harness home)"]
+  H --> PM["prompt.md · progress.md<br/>memory.json · feature_list.json"]
+  H --> HSK["skills/"]
+  H --> SES["sessions/&lt;runId&gt;.jsonl"]
+  H --> ART["artifacts/&lt;label&gt;.txt<br/>spilled &gt;32 KB outputs"]
+  H --> AGENTS["agents/&lt;name&gt;/  (subagents)"]
+  AGENTS --> SPEC["spec.json · prompt.md"]
+  AGENTS --> MEM["memory/  (subagent-specific)"]
+  H --> DB[("cup.db (SQLite)<br/>subjects · resources · policies<br/>delegations · receipts")]
+```
+
+### What lives where
+
+| Thing | Where it lives | Status | Governed by |
+| --- | --- | --- | --- |
+| Project files the agent creates/edits | Workspace root (on disk) | now | jailed file tools; **[plan]** each also a CUP `artifact:file:<path>` resource |
+| Base prompt / progress / memory / features | `.harness/{prompt,progress}.md`, `memory.json`, `feature_list.json` | now | harness state → system prompt |
+| Skills | `skills/` (repo) and `.harness/skills/` | now | listed in prompt; loaded via `harness.skill.read` |
+| Session logs | `.harness/sessions/<runId>.jsonl` | now | append-only audit |
+| Spilled large outputs | `.harness/artifacts/<label>.txt` | now | referenced from observations |
+| CUP runtime (resources, policies, receipts, delegations, action tokens) | **in-memory (RAM)** | now | ephemeral; lost on exit |
+| **Durable CUP model** (subjects, resources, policies, delegations, receipts, prepared actions) | **`.harness/cup.db` (SQLite)** | plan | `SqliteCupPersistence`; rehydrated into the engine on boot |
+| Subagent definition | `.harness/agents/<name>/spec.json` + `prompt.md` | plan | resource `subagent:<name>`; subject `agent:sub:<name>` |
+| Subagent memory | `.harness/agents/<name>/memory/…` | plan | isolated namespace; not readable by others unless granted |
+
+### Two clarifications
+
+- **A governed artifact is split:** its **bytes stay on disk** in the workspace, while its **identity, owner, provenance, sensitivity, policy, and receipts live in `cup.db`**. The DB never duplicates file contents — it points at the path (plus a content hash for lineage) and the `read` handler streams the bytes through the jail.
+- **A subagent shares the project workspace by default**, but gets its **own memory namespace** (`.harness/agents/<name>/memory/`) and a **restricted CUP view** (only the capabilities/resources it was granted or delegated). For stronger isolation, a subagent can optionally be pinned to a jailed subdirectory `workspace/` under its home instead of the shared root.
+
+---
+
 ## 2. Target model: CUP everywhere
 
 Model every first-class entity as a CUP **subject** or **resource**, governed by **policies**, audited by **receipts**, persisted across sessions.
