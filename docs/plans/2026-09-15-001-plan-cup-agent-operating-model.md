@@ -57,23 +57,21 @@ Everything is anchored to a **workspace root** (the `--workspace` dir). Legend:
 ├── skills/                            # [now] repo-level skills (SKILL.md), optional
 ├── <project files…>                   # [now] what the agent reads / writes / executes
 └── .harness/                          # [now] harness home (per workspace)
-    ├── prompt.md                      # [now] base system prompt (agent:coder)
-    ├── progress.md                    # [now] durable progress notes (prompt prefix)
-    ├── memory.json                    # [now] structured memory (harness.memory.*)
+    ├── prompt.md                      # [now] base system prompt (config)
     ├── feature_list.json              # [now] feature pass/fail
     ├── skills/                        # [now] harness-scoped skills (SKILL.md)
-    ├── sessions/<runId>.jsonl         # [now] per-run event log (audit)
     ├── artifacts/<label>.txt          # [now] spilled tool outputs (>32 KB)
+    ├── progress.md · memory.json      # [now] → [plan] MOVE INTO cup.db (agent memory)
+    ├── sessions/<runId>.jsonl         # [now] → [plan] MOVE INTO cup.db (agent sessions)
     ├── agents/                        # subagents
     │   └── <name>/
     │       ├── SKILL.md               # [now] read-only spec surfaced in the prompt
-    │       ├── spec.json              # [plan] id, grants, resource scopes, model, spawnableBy
+    │       ├── spec.json              # [plan] id, grants, resource scopes, model
     │       ├── prompt.md              # [plan] saved subagent system prompt (reused)
-    │       └── memory/                # [plan] subagent-specific state tree
-    │           ├── prompt.md progress.md memory.json feature_list.json
-    │           ├── skills/  sessions/<runId>.jsonl  artifacts/
-    │           └── workspace/         # [plan, optional] jailed subdir for FS-isolated subagents
-    └── cup.db                         # [plan] SQLite: the durable CUP model
+    │       └── workspace/             # [plan, optional] jailed subdir for FS isolation
+    │                                  #   NB: this subagent's memory + sessions live in
+    │                                  #   cup.db, owned by agent:sub:<name> — not on disk
+    └── cup.db                         # [plan] SQLite: CUP model + memory + sessions (per subject)
 ```
 
 ```mermaid
@@ -83,14 +81,12 @@ flowchart TB
   WS --> RSK["skills/ (repo skills)"]
   WS --> PROJ["project files<br/>agent reads / writes / executes"]
   WS --> H[".harness/ (harness home)"]
-  H --> PM["prompt.md · progress.md<br/>memory.json · feature_list.json"]
-  H --> HSK["skills/"]
-  H --> SES["sessions/&lt;runId&gt;.jsonl"]
-  H --> ART["artifacts/&lt;label&gt;.txt<br/>spilled &gt;32 KB outputs"]
-  H --> AGENTS["agents/&lt;name&gt;/  (subagents)"]
-  AGENTS --> SPEC["spec.json · prompt.md"]
-  AGENTS --> MEM["memory/  (subagent-specific)"]
-  H --> DB[("cup.db (SQLite)<br/>subjects · resources · policies<br/>delegations · receipts")]
+  H --> CFG["prompt.md · feature_list.json<br/>skills/ · artifacts/"]
+  H --> AGENTS["agents/&lt;name&gt;/<br/>spec.json · prompt.md (config)"]
+  H --> DB[("cup.db (SQLite)")]
+  DB --> CORE["subjects · resources · policies<br/>delegations · receipts"]
+  DB --> MEM["memory (per subject)<br/>main + each subagent"]
+  DB --> SES["sessions (per subject)<br/>main + each subagent"]
 ```
 
 ### What lives where
@@ -98,19 +94,58 @@ flowchart TB
 | Thing | Where it lives | Status | Governed by |
 | --- | --- | --- | --- |
 | Project files the agent creates/edits | Workspace root (on disk) | now | jailed file tools; **[plan]** each also a CUP `artifact:file:<path>` resource |
-| Base prompt / progress / memory / features | `.harness/{prompt,progress}.md`, `memory.json`, `feature_list.json` | now | harness state → system prompt |
+| Base prompt / features (config) | `.harness/prompt.md`, `feature_list.json` | now | harness config → system prompt |
 | Skills | `skills/` (repo) and `.harness/skills/` | now | listed in prompt; loaded via `harness.skill.read` |
-| Session logs | `.harness/sessions/<runId>.jsonl` | now | append-only audit |
+| **Agent memory** (main + each subagent) | today `.harness/{progress.md,memory.json}` → **`cup.db`** `memory:<subject>` | now → plan | CUP resource, `owner = subject`; policies below |
+| **Agent sessions** (main + each subagent) | today `.harness/sessions/<runId>.jsonl` → **`cup.db`** `session:<subject>:<runId>` | now → plan | CUP resource, `owner = subject`; policies below |
 | Spilled large outputs | `.harness/artifacts/<label>.txt` | now | referenced from observations |
 | CUP runtime (resources, policies, receipts, delegations, action tokens) | **in-memory (RAM)** | now | ephemeral; lost on exit |
 | **Durable CUP model** (subjects, resources, policies, delegations, receipts, prepared actions) | **`.harness/cup.db` (SQLite)** | plan | `SqliteCupPersistence`; rehydrated into the engine on boot |
 | Subagent definition | `.harness/agents/<name>/spec.json` + `prompt.md` | plan | resource `subagent:<name>`; subject `agent:sub:<name>` |
-| Subagent memory | `.harness/agents/<name>/memory/…` | plan | isolated namespace; not readable by others unless granted |
+
+### Access model for memory & sessions (CUP-governed)
+
+Memory and sessions are **CUP resources in `cup.db`**, one owner per subject, addressed
+so that ownership is explicit:
+
+- `memory:<subjectId>` (e.g. `memory:agent:coder`, `memory:agent:sub:reviewer`)
+- `session:<subjectId>:<runId>`
+
+Each resource carries `owner = <subjectId>` and metadata `{ agentKind: "main" | "subagent", subagentName? }`, so a reader always knows **whose** memory/session it is.
+
+Policies (deny-by-default; everything not allowed is denied):
+
+- **Main agent (`agent:coder`)** — `allow read` on **all** `memory:*` and `session:*`.
+  It can read any subagent's memory and sessions, and reads return the `owner` +
+  `agentKind`, so it always distinguishes **main vs subagent** state.
+- **Each subagent (`agent:sub:<name>`)** — `allow read` on **only** its own
+  `memory:agent:sub:<name>` and `session:agent:sub:<name>:*`. It cannot read the
+  main agent's or sibling subagents' memory/sessions.
+- **Writes** — every subject may `create/update` only its **own** memory and session
+  resources.
+
+```mermaid
+flowchart TB
+  subgraph DB["cup.db"]
+    MM["memory:agent:coder"]
+    MS["session:agent:coder:*"]
+    RM["memory:agent:sub:reviewer"]
+    RS["session:agent:sub:reviewer:*"]
+  end
+  Main["agent:coder (main)"] -->|"read all (labeled by owner)"| MM
+  Main --> MS
+  Main --> RM
+  Main --> RS
+  Sub["agent:sub:reviewer"] -->|"read own only"| RM
+  Sub --> RS
+  Sub -. "denied" .-> MM
+  Sub -. "denied" .-> MS
+```
 
 ### Two clarifications
 
 - **A governed artifact is split:** its **bytes stay on disk** in the workspace, while its **identity, owner, provenance, sensitivity, policy, and receipts live in `cup.db`**. The DB never duplicates file contents — it points at the path (plus a content hash for lineage) and the `read` handler streams the bytes through the jail.
-- **A subagent shares the project workspace by default**, but gets its **own memory namespace** (`.harness/agents/<name>/memory/`) and a **restricted CUP view** (only the capabilities/resources it was granted or delegated). For stronger isolation, a subagent can optionally be pinned to a jailed subdirectory `workspace/` under its home instead of the shared root.
+- **A subagent shares the project workspace by default**, but its **memory and sessions are its own CUP resources in `cup.db`** (`memory:agent:sub:<name>`, `session:agent:sub:<name>:*`), and it runs with a **restricted CUP view** (only the capabilities/resources it was granted or delegated). Per the access model above, the main agent can read a subagent's memory/sessions (labeled by owner) but the subagent cannot read anyone else's. For stronger filesystem isolation, a subagent can optionally be pinned to a jailed `workspace/` subdirectory under its home instead of the shared root.
 
 ---
 
@@ -149,8 +184,9 @@ flowchart TB
 | --- | --- |
 | Tools | `Capability` resources + `execute` policies (today) |
 | Files / dirs the agent creates | `data` resources (`artifact:file:<path>`) with `read` handlers |
-| Durable memory / skills / features | `data` resources (`artifact:memory:*`, `skill:*`, `feature:*`) |
-| Sessions | `data` resources (`session:<id>`) |
+| Agent memory (main + subagents) | `cup.db` `memory:<subject>` resources — owner-scoped (main reads all; subagent reads own) |
+| Sessions (main + subagents) | `cup.db` `session:<subject>:<runId>` resources — owner-scoped (same policy) |
+| Skills / features | `data` resources (`skill:*`, `feature:*`) |
 | Subagents | subject `agent:sub:<name>` **and** resource `subagent:<name>` (its spec/prompt) |
 | "who may do what" | Policies (`allow`/`deny`, priorities, scope, obligations) |
 | Parent → child least-privilege | `delegate()` grants (purpose, operations, scope, expiry, revoke) |
@@ -210,7 +246,7 @@ Stored under `.harness/agents/<name>/`:
 
 - `spec.json` — `{ id: "agent:sub:<name>", displayName, model?, grants: [{capability, operations}], resourceScopes: [...], memoryNamespace, sensitivityCeiling, spawnableBy: [subjectIds], createdAt, updatedAt }`.
 - `prompt.md` — the subagent's **saved system prompt**, reused verbatim on every launch.
-- `memory/` — a subagent-scoped `.harness`-style state tree (`prompt.md`/`progress.md`/`memory.json`/`feature_list.json`/`skills/`/`sessions/`), so **memories are subagent-specific** and accumulate across sessions.
+- **Memory and sessions are not files here** — they live in `cup.db` as `memory:agent:sub:<name>` and `session:agent:sub:<name>:*`, owned by the subagent subject, so they are subagent-specific, accumulate across sessions, and are governed by the access model above (main reads all labeled by owner; the subagent reads only its own).
 
 ### B.2 Each subagent is a CUP subject with its own capability set
 - Register the subagent as subject `agent:sub:<name>` and as resource `subagent:<name>`.
@@ -222,7 +258,7 @@ New capability `harness.subagent.spawn { name, goal, delegate? }`:
 
 1. Authorize the **parent** to `execute` the `subagent:<name>` resource (so not every agent can spawn every subagent).
 2. Optionally **delegate** a scoped subset of the parent's own authority to the child: `cup.delegate({ from: parent, to: child, capability, operations, scope, purpose, expiresInMs })` — time-boxed, purpose-bound, and revocable via `revokeGrant`. This is least-privilege handoff.
-3. Launch a nested `runAgentLoop` with `subject = agent:sub:<name>`, `prompt = <saved subagent prompt>`, state loaded from the subagent's `memory/` namespace, and a CUP view restricted to the child's grants (+ delegated grants).
+3. Launch a nested `runAgentLoop` with `subject = agent:sub:<name>`, `prompt = <saved subagent prompt>`, memory loaded from the subagent's `cup.db` resource (`memory:agent:sub:<name>`), and a CUP view restricted to the child's grants (+ delegated grants).
 4. The child's tool calls run through the same `cup.execute`, producing receipts **under the child subject**. The result returns to the parent as an observation + receipt; the delegation is revoked on completion/expiry.
 
 ```mermaid
@@ -252,7 +288,7 @@ Because spec + prompt + memory persist, a later top-level session re-launches th
 - CLI: `harness subagent create <name> --prompt <file> [--allow cap1,cap2]`, `harness subagent run <name> "<goal>"`.
 - Programmatic: the parent agent calls `harness.subagent.spawn`.
 
-Isolation guarantees: the child's memory namespace is separate; it **cannot** read parent memory or ungranted artifacts; its capability set is its own; every action is receipted under its subject.
+Isolation guarantees: the child's memory and sessions are its own `cup.db` resources; it **cannot** read the parent's or sibling subagents' memory/sessions or any ungranted artifact (deny-by-default), while the main agent **can** read the child's (labeled by owner). Its capability set is its own, and every action is receipted under its subject.
 
 ---
 
@@ -272,6 +308,7 @@ Parts A/B make CUP the substrate for authority everywhere:
 - **Persistence (SQLite).** CUP is in-memory today (`denyByDefault()`), so resources/policies/receipts vanish between runs. Introduce a single **SQLite** database at `.harness/cup.db` as the durable store:
   - Implement a SQLite `SqlClient` over Node's built-in **`node:sqlite`** (`DatabaseSync`, zero deps; `better-sqlite3` is a drop-in alternative if a compiled driver is preferred), and a **`SqliteCupPersistence`** implementing the existing `CupPersistence` interface, plus a **`CUP_SQLITE_SCHEMA`** (SQLite DDL: `TEXT`/`INTEGER`, JSON stored as `TEXT`, ISO-8601 timestamps — no `jsonb`/`timestamptz`/`pgcrypto`). These land in CUP core alongside the Postgres versions; Postgres stays available for multi-host deployments.
   - Back the `CapabilityUI` `ReceiptSink` with the same DB so every receipt is appended to `.harness/cup.db`.
+  - The schema also holds the **memory and session** content: `cup_memory` (per-subject memory blob/entries) and `cup_sessions` (append-only per-subject session events), each linked to its `memory:<subject>` / `session:<subject>:<runId>` **resource** row so CUP policies gate every read/write (see the access model). Reads always return the `owner` + `agentKind` so the main agent can tell main from subagent state.
   - On boot, load subjects/resources/policies/delegations from SQLite into the in-memory engine (SQLite is the durable store; the in-memory engine remains the hot path). Use WAL mode and treat the single agent process as the sole writer; migrations are versioned SQL files applied at open.
 - **Backward compatibility.** Ship behind flags (`CUP_STRICT=1`, `CUP_GOVERNED_EXEC=1`). Phase 1 is audit-only (register resources + receipts without blocking) so nothing breaks; enforcement turns on later.
 - **Security hardening.** Sandbox governed exec (env scrub, fs/network limits, rlimits); classify sensitivity (secret scan) to drive obligations; keep action-token TTLs.
