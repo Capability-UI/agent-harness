@@ -33,6 +33,17 @@ flowchart LR
 - `loop.ts` calls `cup.project()` to get the authorized tool set, then routes every tool call through `cup.execute()` — which authorizes, validates input against the capability's `inputSchema`, runs the handler, and emits a **receipt**.
 - **What CUP governs today:** only *capabilities* (tools). **What it does not:** the files/memory/skills/sessions the agent produces are plain workspace state with no resource identity, no per-artifact policy, and no receipts. This plan closes that gap.
 
+### Where is the database today? (there isn't one)
+
+There is **no database** in the current system. Two layers of state, both non-DB:
+
+- **CUP runtime** is purely **in-memory**: `host.ts` calls `denyByDefault()`, whose engine keeps resources, policies, action tokens, delegations, and receipts (`MemoryReceiptSink`) in RAM. All of it is lost when the process exits.
+- **Harness state** is **flat files** under `.harness/` (`prompt.md`, `progress.md`, `memory.json`, `feature_list.json`, `sessions/*.jsonl`, `skills/`, `agents/`).
+
+CUP core *does* define a persistence seam — the `CupPersistence` and `SqlClient` interfaces in `persistence.ts` — but the only concrete implementation shipped is **Postgres** (`PostgresPersistence` + `CUP_POSTGRES_SCHEMA`, mirrored by `sql/001_cup_initial.sql`), and **nothing in the harness uses it**. So resources, policies, and receipts have nowhere durable to live.
+
+**Decision: use SQLite, not Postgres.** This plan introduces a single **SQLite** database at `.harness/cup.db` as the durable store for the CUP model (resources, policies, delegations, receipts, subagent specs). SQLite fits a per-workspace, single-process agent far better than Postgres: no server, one file, trivial backup/versioning, and Node's built-in `node:sqlite` (`DatabaseSync`) means **zero new dependencies**. The `SqlClient`/`CupPersistence` interfaces are DB-agnostic, so this is an additive backend, not a rewrite.
+
 ---
 
 ## 2. Target model: CUP everywhere
@@ -54,7 +65,7 @@ flowchart TB
   end
   Pol["Policy store (deny-by-default)<br/>allow / deny / delegate + obligations"]
   Rec[("Receipts (durable audit)")]
-  Store[(".harness/cup persistence")]
+  Store[(".harness/cup.db (SQLite)")]
 
   Subjects -->|"operations: discover/inspect/read/create/update/delete/execute/share/delegate"| Pol
   Pol --> Resources
@@ -77,6 +88,7 @@ flowchart TB
 | Parent → child least-privilege | `delegate()` grants (purpose, operations, scope, expiry, revoke) |
 | Audit / provenance | Receipts (persisted `ReceiptSink`) |
 | Sensitive-field handling | Obligations: `redact`, `require_confirmation`, `human_review`, `write_receipt` |
+| Durable persistence | **SQLite** `.harness/cup.db` via `CupPersistence` (subjects, resources, policies, delegations, receipts) |
 
 ---
 
@@ -189,19 +201,22 @@ Parts A/B make CUP the substrate for authority everywhere:
 
 ## 6. Cross-cutting concerns
 
-- **Persistence.** CUP is in-memory today (`denyByDefault()`), so resources/policies/receipts vanish between runs. Add a `.harness/cup/` store (`resources.json`, `policies.json`, `receipts.jsonl`) rehydrated into CUP on boot, plus a file-backed `ReceiptSink` (the `CapabilityUI` constructor already accepts one). Optionally graduate to CUP's PostgreSQL persistence primitives for multi-agent durability.
+- **Persistence (SQLite).** CUP is in-memory today (`denyByDefault()`), so resources/policies/receipts vanish between runs. Introduce a single **SQLite** database at `.harness/cup.db` as the durable store:
+  - Implement a SQLite `SqlClient` over Node's built-in **`node:sqlite`** (`DatabaseSync`, zero deps; `better-sqlite3` is a drop-in alternative if a compiled driver is preferred), and a **`SqliteCupPersistence`** implementing the existing `CupPersistence` interface, plus a **`CUP_SQLITE_SCHEMA`** (SQLite DDL: `TEXT`/`INTEGER`, JSON stored as `TEXT`, ISO-8601 timestamps — no `jsonb`/`timestamptz`/`pgcrypto`). These land in CUP core alongside the Postgres versions; Postgres stays available for multi-host deployments.
+  - Back the `CapabilityUI` `ReceiptSink` with the same DB so every receipt is appended to `.harness/cup.db`.
+  - On boot, load subjects/resources/policies/delegations from SQLite into the in-memory engine (SQLite is the durable store; the in-memory engine remains the hot path). Use WAL mode and treat the single agent process as the sole writer; migrations are versioned SQL files applied at open.
 - **Backward compatibility.** Ship behind flags (`CUP_STRICT=1`, `CUP_GOVERNED_EXEC=1`). Phase 1 is audit-only (register resources + receipts without blocking) so nothing breaks; enforcement turns on later.
 - **Security hardening.** Sandbox governed exec (env scrub, fs/network limits, rlimits); classify sensitivity (secret scan) to drive obligations; keep action-token TTLs.
 - **Testing.** Unit: registry create/version, deny-by-default artifact privacy, owner-only access, delegation grant/scope/expiry/revoke, subagent isolation (child cannot reach ungranted resources), sandboxed exec (secrets absent, path escape blocked). Integration: end-to-end spawn of a subagent; reuse across two sessions with growing subagent memory; a receipt-lineage assertion for a created-then-executed artifact.
 
 ## 7. Phases
 
-1. **Audit foundation** — file-backed `ReceiptSink` + `ResourceRegistry`; register artifacts on write (non-enforcing).
+1. **Audit foundation (SQLite)** — add `SqliteCupPersistence` + `CUP_SQLITE_SCHEMA` and a SQLite-backed `ReceiptSink` writing to `.harness/cup.db`; add the `ResourceRegistry` and register artifacts on write (non-enforcing).
 2. **Strict artifact policies** — owner-only defaults, sensitivity classification, obligations; enforce reads through resource `read` handlers.
 3. **Governed execution** — `workspace.exec` over registered code resources + sandbox; gate/disable raw `bash`.
 4. **Subagent persistence & subjects** — spec/prompt/memory layout; register subjects + capability policies; `harness subagent create|run`.
 5. **Spawn + delegation** — `harness.subagent.spawn`; least-privilege delegation with revoke; per-subagent memory across sessions.
-6. **CUP-everywhere** — model skills/sessions/features as resources; optional Postgres persistence; consolidate the manifest.
+6. **CUP-everywhere** — model skills/sessions/features as resources in `.harness/cup.db`; consolidate all durable state in SQLite (Postgres remains an optional backend for multi-host).
 
 ## 8. Open questions / risks
 
@@ -211,3 +226,5 @@ Parts A/B make CUP the substrate for authority everywhere:
 - **Sandbox implementation:** env-scrub + cwd + rlimits first; `bubblewrap`/`nsjail` for stronger isolation later.
 - **Delegation UX:** default scope a spawn hands down; explicit vs inferred from the child's grants.
 - **Migration:** existing workspaces have unregistered artifacts — lazily register on first access.
+- **SQLite driver:** `node:sqlite` is built-in but currently emits an experimental warning; `better-sqlite3` avoids that at the cost of a native build. Pick one behind the `SqlClient` seam so it can be swapped.
+- **Concurrency:** SQLite is single-writer. Fine for one agent process; if subagents run in separate processes, funnel writes through one owner or enable WAL + short-lived transactions and accept serialized writes.
