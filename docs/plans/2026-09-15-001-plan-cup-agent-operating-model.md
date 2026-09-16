@@ -46,6 +46,31 @@ CUP core *does* define a persistence seam — the `CupPersistence` and `SqlClien
 
 ---
 
+## Install & run model — one tool, many workspaces
+
+The **`harness` CLI is installed once and lives outside any project** (build it, then
+`npm link` / `npx` / global install). You point it at a project with `--workspace`
+(or by `cd`-ing into it). **Each workspace gets its own `.harness/`** — the *tool* is
+shared, but the per-project state (prompt, memory, sessions, and the planned
+`cup.db`) is **not** shared across workspaces. Exactly like one `git` binary managing
+many repos, each with its own `.git/`.
+
+```mermaid
+flowchart TB
+  CLI["harness CLI<br/>installed once — outside any project"]
+  CLI -->|"--workspace ~/project-a"| A["project-a/ (workspace root)"]
+  CLI -->|"--workspace ~/project-b"| B["project-b/ (workspace root)"]
+  CLI -->|"--workspace ~/project-c"| C["project-c/ (workspace root)"]
+  A --> HA[".harness/<br/>project-a state + cup.db"]
+  B --> HB[".harness/<br/>project-b state + cup.db"]
+  C --> HC[".harness/<br/>project-c state + cup.db"]
+```
+
+> One `harness` binary, N workspaces; **each workspace has its own `.harness/`**
+> (its own memory, sessions, and `cup.db`). The `.harness/` is per-project, never shared.
+
+---
+
 ## Storage layout — where everything lives
 
 **First, the two things people confuse — workspace root vs `.harness/`:**
