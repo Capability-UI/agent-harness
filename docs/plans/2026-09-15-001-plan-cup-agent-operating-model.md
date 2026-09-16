@@ -48,15 +48,25 @@ CUP core *does* define a persistence seam — the `CupPersistence` and `SqlClien
 
 ## Storage layout — where everything lives
 
-Everything is anchored to a **workspace root** (the `--workspace` dir). Legend:
-**[now]** exists today · **[plan]** introduced by this plan.
+**First, the two things people confuse — workspace root vs `.harness/`:**
+
+- **Workspace root** — the folder you point the agent at with `--workspace <dir>`. This is **your project**: the code the agent reads, writes, and runs. Every file tool (`workspace.read/write/edit/glob/grep`) is jailed to this folder. *You* own it.
+- **`.harness/`** — a **hidden folder the harness creates *inside* the workspace root** to keep **its own** operational state: the system prompt, the agent's memory/progress, session logs, skills, subagent definitions, spilled outputs, and (planned) the `cup.db` database. *The harness* owns it.
+
+Think of it exactly like **`.git/` inside a repository**: your files sit in the project folder, and a single hidden control directory (`.git/` for Git, `.harness/` for the agent) lives inside it holding the tool's own bookkeeping.
+
+> **workspace root = your project · `.harness/` = the agent's brain/notebook, nested inside it.**
+
+In the tree below, indentation shows this nesting: `.harness/` is a child of the workspace root.
+
+Legend: **[now]** exists today · **[plan]** introduced by this plan.
 
 ```text
-<workspace root>/                      # [now] the project; jail for file tools
+<workspace root>/                      # [now] YOUR PROJECT (jail for file tools)
 ├── AGENTS.md                          # [now] injected into the system prompt
 ├── skills/                            # [now] repo-level skills (SKILL.md), optional
 ├── <project files…>                   # [now] what the agent reads / writes / executes
-└── .harness/                          # [now] harness home (per workspace)
+└── .harness/                          # [now] THE AGENT'S OWN STATE (like .git/ — tool-owned)
     ├── prompt.md                      # [now] base system prompt (config)
     ├── feature_list.json              # [now] feature pass/fail
     ├── skills/                        # [now] harness-scoped skills (SKILL.md)
@@ -76,11 +86,11 @@ Everything is anchored to a **workspace root** (the `--workspace` dir). Legend:
 
 ```mermaid
 flowchart TB
-  WS["Workspace root<br/>(file-tool jail)"]
+  WS["Workspace root<br/>= YOUR PROJECT (file-tool jail)"]
   WS --> AGM["AGENTS.md"]
   WS --> RSK["skills/ (repo skills)"]
   WS --> PROJ["project files<br/>agent reads / writes / executes"]
-  WS --> H[".harness/ (harness home)"]
+  WS --> H[".harness/<br/>= agent's own state (like .git/)"]
   H --> CFG["prompt.md · feature_list.json<br/>skills/ · artifacts/"]
   H --> AGENTS["agents/&lt;name&gt;/<br/>spec.json · prompt.md (config)"]
   H --> DB[("cup.db (SQLite)")]
