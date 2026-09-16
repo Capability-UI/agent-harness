@@ -8,7 +8,8 @@ context assembly, session log, and the workspace jail.
 - **Model-agnostic**: any OpenAI-compatible chat-completions endpoint (OpenAI, OpenRouter, local servers).
 - **Capability-governed tools**: every tool call goes through CUP's deny-by-default policy and produces a receipt.
 - **Jailed workspace**: all file and shell operations are confined to a single workspace root.
-- **Durable memory & skills**: progress notes, JSON memory, and a skills catalog persist under `.harness/`.
+- **SQLite-backed state**: agent memory, sessions, and CUP receipts persist in a per-workspace SQLite database at `.harness/cup.db`, with an ownership-based access model.
+- **Reusable subagents**: define a named subagent with its own saved system prompt, subject identity, subagent-specific memory, and a CUP-scoped capability set, then launch it as a session (`harness subagent run`).
 - **Built-in autoresearch**: a Karpathy-style git-ratchet loop plus real benchmarks (HumanEval, HumanEval+, MultiPL-E TS) for improving the harness itself.
 
 ---
@@ -89,14 +90,17 @@ from the final answer.
 ## CLI reference
 
 ```
-harness <run|init|tools> [prompt] [options]
+harness <run|init|tools|subagent> [prompt] [options]
 ```
 
 | Command | Description |
 | --- | --- |
-| `run <prompt>` | Run the agent loop toward a goal (needs an API key). |
+| `run <prompt>` | Run the agent loop toward a goal as `agent:coder` (needs an API key). |
 | `init` | Create the `.harness/` layout in the workspace. |
 | `tools` | List the CUP-authorized tools for `agent:coder`. |
+| `subagent create <name> --prompt <file> [--allow a,b,c]` | Save a reusable, CUP-scoped subagent (own subject + memory). |
+| `subagent list` | List saved subagents and their allowed capabilities. |
+| `subagent run <name> <goal>` | Run a saved subagent as its own subject (needs an API key). |
 
 | Option | Description | Default |
 | --- | --- | --- |
@@ -105,6 +109,8 @@ harness <run|init|tools> [prompt] [options]
 | `--api-key <key>` | Override `OPENAI_API_KEY` | — |
 | `--base-url <url>` | Override `OPENAI_BASE_URL` | — |
 | `--model <id>` | Override `OPENAI_MODEL` | — |
+| `--prompt <file>` | System-prompt file for `subagent create` | — |
+| `--allow a,b,c` | Capability ids a subagent may use (`subagent create`) | read-mostly set |
 | `--help`, `-h` | Show usage | — |
 
 ## Tools (CUP capabilities)
@@ -145,17 +151,52 @@ commands time out after `BASH_TIMEOUT_MS` (30 s). See `src/constants.ts`.
 
 ## Harness state (`.harness/`)
 
-`harness init` (and the first `run`) scaffold per-workspace state:
+State is split between **files** (config the agent reads) and a **SQLite database**
+(`cup.db`, the durable CUP model + memory + sessions + receipts). `harness init`
+(and the first `run`) scaffold it per workspace:
 
-| File / dir | Role |
-| --- | --- |
-| `prompt.md` | Base system prompt. |
-| `progress.md` | Appended progress notes (durable memory). |
-| `memory.json` | Structured JSON memory. |
-| `skills/` | Skill bodies loaded on demand via `harness.skill.read`. |
-| `agents/` | Sub-agent specs. |
-| `sessions/*.jsonl` | Per-run event logs. |
-| `feature_list.json` | Feature pass/fail tracking. |
+| Path | Role | Storage |
+| --- | --- | --- |
+| `prompt.md` | Base system prompt (config) | file |
+| `feature_list.json` | Feature pass/fail tracking | file |
+| `skills/` | Skill bodies loaded via `harness.skill.read` | files |
+| `agents/<name>/` | Subagent definitions (`spec.json` + `prompt.md`) | files |
+| `artifacts/*.txt` | Spilled large tool outputs (>32 KB) | files |
+| **Agent memory** (progress + JSON) | keyed by subject | **`cup.db`** (`harness_memory`) |
+| **Sessions** (per-run event log) | keyed by subject | **`cup.db`** (`harness_sessions`) |
+| **Receipts** (authorization audit) | every `cup.execute` | **`cup.db`** (via `SqliteCupPersistence`) |
+
+Memory and sessions are keyed by **subject** and read-guarded: a subject reads its
+own, and the main `agent:coder` may read any subject's (so it can inspect a
+subagent's memory), enforced in `src/cup-store.ts` (`openCupStore`). The SQLite
+backend is CUP's `SqliteCupPersistence` over Node's built-in `node:sqlite`.
+
+## Subagents
+
+A **subagent** is a reusable, CUP-scoped agent persona: a saved system prompt, its
+own subject `agent:sub:<name>`, its own memory/sessions in `cup.db`, and a
+capability set granted by CUP policy (deny-by-default gives it nothing else).
+
+```bash
+# define a reviewer that may only read/search (no write/edit/bash)
+harness subagent create reviewer --prompt ./reviewer-prompt.md \
+  --allow workspace.read,workspace.glob,workspace.grep
+
+harness subagent list
+
+# launch it as its own session (uses its saved prompt + its own memory)
+OPENAI_API_KEY=... harness subagent run reviewer "review src/ for missing error handling"
+```
+
+- **Reusable across sessions:** the spec + prompt persist under
+  `.harness/agents/<name>/`, and the subagent's memory accumulates in `cup.db`
+  keyed by `agent:sub:<name>`, so each `subagent run` resumes the same persona.
+- **CUP-scoped capabilities:** `--allow` (default: a read-mostly set) becomes the
+  subagent's grant; its authorized tool view contains only those capabilities, and
+  anything else is `denied`.
+- **Memory isolation:** a subagent reads only its own memory/sessions; the main
+  agent can read a subagent's (labeled by owner). See the design in
+  [docs/subagents.md](docs/subagents.md).
 
 ## Capability UI integration
 
@@ -208,8 +249,10 @@ under `research/eval/data/` for reproducibility (`research/eval/fetch-benchmark.
 | `src/provider.ts` | OpenAI-compatible client (tool-name codec, retries, normalization). |
 | `src/fs-tools.ts` | glob / grep / bash primitives. |
 | `src/workspace.ts` | Workspace jail (path confinement). |
-| `src/harness-state.ts` | `.harness/` layout and state loading. |
-| `src/session.ts` | JSONL session logging. |
+| `src/harness-state.ts` | `.harness/` layout and state loading (memory from `cup.db`). |
+| `src/cup-store.ts` | SQLite store: `.harness/cup.db` memory/sessions + persisted receipt sink + access model. |
+| `src/subagent.ts` | Subagent specs (`agent:sub:<name>`), create/load/list, CUP scoping. |
+| `src/session.ts` | Session logging into `cup.db` (per subject). |
 | `src/observations.ts` | Observation capping / artifact spill. |
 | `research/` | Autoresearch loop, evaluators, and benchmark batteries. |
 
@@ -224,9 +267,10 @@ npm run check   # type-check only (tsc --noEmit)
 ## Docs
 
 - Worked example (how the agent works & evolves, with diagrams): [docs/agent-via-cup.md](docs/agent-via-cup.md)
+- Subagents (design, memory model, CUP scoping, with diagrams): [docs/subagents.md](docs/subagents.md)
 - Developer overview: [docs/developer/overview.md](docs/developer/overview.md)
 - Research synthesis: [docs/llm-agent-harness-research.md](docs/llm-agent-harness-research.md)
-- Plan: [docs/plans/2026-09-07-001-plan-capability-ui-harness.md](docs/plans/2026-09-07-001-plan-capability-ui-harness.md)
+- Plans: [CUP as the operating model](docs/plans/2026-09-15-001-plan-cup-agent-operating-model.md) · [initial harness plan](docs/plans/2026-09-07-001-plan-capability-ui-harness.md)
 
 ## License
 

@@ -11,6 +11,21 @@ the single data model, permission set, and audit trail for the entire harness:
 
 ---
 
+## Implementation status
+
+**Landed on `main` (tested):**
+- **SQLite persistence in CUP core** — `CUP_SQLITE_SCHEMA`, `openNodeSqlite` (over Node's built-in `node:sqlite`, zero deps), and `SqliteCupPersistence` implementing `CupPersistence`. *(Capability-UI)*
+- **`.harness/cup.db`** — agent **memory** and **sessions** moved into SQLite keyed by subject, plus a persisted **receipt sink**; the read **access model** is enforced (`src/cup-store.ts`).
+- **Reusable subagents** — `harness subagent create | list | run`, saved prompt + subject-keyed memory, and **CUP-scoped capabilities** (`src/subagent.ts`, `allowCapabilitiesFor`). See [docs/subagents.md](../subagents.md).
+
+**Planned (not yet implemented):**
+- Artifact **resource registry** + strict per-artifact policies (Part A.1–A.2).
+- **Governed execution** / sandbox `workspace.exec` (Part A.3).
+- **In-loop spawn** `harness.subagent.spawn` + least-privilege **delegation** (Part B.3).
+- Optional **global `~/.harness` scope** (shared subagents/memory).
+
+---
+
 ## 1. How the workspace and execution work today
 
 - **Writing.** `workspace.write` / `workspace.edit` go through `Workspace` (`src/workspace.ts`), which confines every path to the workspace root (`assertInside` rejects `..` and absolute escapes). So file *reads/writes/globs/greps* are jailed.
