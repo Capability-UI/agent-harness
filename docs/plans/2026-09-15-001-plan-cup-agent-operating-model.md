@@ -184,6 +184,54 @@ flowchart TB
 
 ---
 
+## Scope — workspace-specific by default, shareable by design
+
+**Default: everything is workspace-specific.** Subagents, memory, and sessions all
+live in the per-workspace `.harness/cup.db`, so a subagent defined in `project-a`
+and its memories/sessions do **not** leak into `project-b`. That isolation is the
+safe default.
+
+**Optional shared/global scope (opt-in).** Because these are CUP *resources* with a
+`scope` attribute, sharing is just a storage-location + policy choice, not a rewrite.
+Add a user-level home `~/.harness/` (overridable via `$HARNESS_HOME`) with its own
+`cup.db` ("global store"). On boot, CUP loads **global + workspace** resources into
+one engine; the access model still applies, and **workspace resources win on id
+conflicts** (project overrides global).
+
+| Thing | Default scope | Optional shared scope |
+| --- | --- | --- |
+| Subagent **definition** (prompt + capability set) | workspace | **global** (`~/.harness`) → reuse the same persona in every project |
+| Subagent **memory** | workspace (fresh per project) | **global** → the subagent accumulates cross-project knowledge |
+| Main-agent **memory** | workspace | optional **global tier** for cross-project prefs (e.g. coding conventions), merged read-side |
+| **Sessions** | workspace (a run targets one project) | optional **global audit index**; content stays workspace-owned |
+
+So a "reviewer" subagent can be defined once at global scope and reused everywhere,
+and you separately choose whether it carries **global memory** (learns across
+projects) or **workspace memory** (same persona, isolated memory per project).
+
+```mermaid
+flowchart TB
+  subgraph Global["~/.harness (global store — optional)"]
+    GSub["subagent:reviewer (global)<br/>+ optional global memory"]
+    GMem["memory@global (cross-project prefs)"]
+  end
+  subgraph WA["project-a/.harness/cup.db"]
+    AMem["memory + sessions (workspace)"]
+  end
+  subgraph WB["project-b/.harness/cup.db"]
+    BMem["memory + sessions (workspace)"]
+  end
+  GSub -. "reused in" .-> WA
+  GSub -. "reused in" .-> WB
+  GMem -. "merged read" .-> WA
+  GMem -. "merged read" .-> WB
+```
+
+> Rule of thumb: **sessions are inherently per-workspace; memory and subagents are
+> per-workspace by default but can be promoted to a shared `~/.harness` global store.**
+
+---
+
 ## 2. Target model: CUP everywhere
 
 Model every first-class entity as a CUP **subject** or **resource**, governed by **policies**, audited by **receipts**, persisted across sessions.
