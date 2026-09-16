@@ -1,34 +1,48 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { DEFAULT_MAX_TURNS } from './constants.js';
 import { openCupStore } from './cup-store.js';
-import { createHarnessCup } from './host.js';
+import { allowCapabilitiesFor, createHarnessCup } from './host.js';
 import { ensureHarnessLayout, loadHarnessState } from './harness-state.js';
 import { runAgentLoop } from './loop.js';
 import { createModel, stripReasoning } from './provider.js';
 import { SessionLog } from './session.js';
+import {
+  createSubagent,
+  listSubagents,
+  loadSubagent,
+  subagentSubject,
+} from './subagent.js';
 import { Workspace } from './workspace.js';
 
 interface CliOptions {
   command: string;
+  subcommand: string;
+  name: string;
   prompt: string;
   workspace: string;
   maxTurns: number;
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  promptFile?: string;
+  allow?: string;
   help: boolean;
 }
 
 export function parseHarnessArgv(argv: string[]): CliOptions {
   const options: CliOptions = {
     command: 'run',
+    subcommand: '',
+    name: '',
     prompt: '',
     workspace: process.cwd(),
     maxTurns: DEFAULT_MAX_TURNS,
     help: false,
   };
   const rest: string[] = [];
+  let commandParsed = false;
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (!token) continue;
@@ -53,17 +67,37 @@ export function parseHarnessArgv(argv: string[]): CliOptions {
       options.model = argv[++i];
       continue;
     }
-    if (!token.startsWith('-') && rest.length === 0 && (token === 'run' || token === 'init' || token === 'tools')) {
+    if (token === '--prompt') {
+      options.promptFile = argv[++i];
+      continue;
+    }
+    if (token === '--allow') {
+      options.allow = argv[++i];
+      continue;
+    }
+    if (
+      !token.startsWith('-') &&
+      !commandParsed &&
+      rest.length === 0 &&
+      (token === 'run' || token === 'init' || token === 'tools' || token === 'subagent')
+    ) {
       options.command = token;
+      commandParsed = true;
       continue;
     }
     rest.push(token);
+  }
+  if (options.command === 'subagent') {
+    options.subcommand = rest.shift() ?? '';
+    if (options.subcommand === 'create' || options.subcommand === 'run') {
+      options.name = rest.shift() ?? '';
+    }
   }
   options.prompt = rest.join(' ').trim();
   return options;
 }
 
-const USAGE = `Usage: harness <run|init|tools> [prompt] [options]
+const USAGE = `Usage: harness <run|init|tools|subagent> [prompt] [options]
 
 Coding agent CLI. Tools and policy go through Capability UI. The loop, context, and session live here.
 
@@ -71,6 +105,11 @@ Commands:
   run <prompt>    run the agent (requires an API key)
   init            create .harness layout in the workspace
   tools           list CUP-authorized tools for agent:coder
+  subagent create <name> --prompt <file> [--allow a,b,c]
+                  save a reusable, CUP-scoped subagent (own subject + memory)
+  subagent list   list saved subagents and their allowed capabilities
+  subagent run <name> <goal>
+                  run a saved subagent as its own subject (requires an API key)
 
 Options (run):
   --workspace <dir>   workspace root (default: cwd)
@@ -78,6 +117,11 @@ Options (run):
   --api-key <key>       API key (overrides OPENAI_API_KEY)
   --base-url <url>      OpenAI-compatible API root (overrides OPENAI_BASE_URL)
   --model <id>          model id (overrides OPENAI_MODEL)
+
+Options (subagent):
+  --prompt <file>       system prompt file for 'subagent create'
+  --allow a,b,c         comma-separated capability ids the subagent may use
+  --workspace <dir>     workspace root (default: cwd)
 
 Env (OpenAI-compatible providers, including OpenRouter):
   OPENAI_API_KEY        default https://api.openai.com/v1 when OPENAI_BASE_URL is unset
@@ -116,6 +160,9 @@ export async function runCli(argv: string[], write: (text: string) => void = tex
     }
     return 0;
   }
+  if (options.command === 'subagent') {
+    return runSubagentCommand(options, workspace, write);
+  }
   if (!options.prompt) {
     write('A prompt is required for run.\n');
     write(USAGE);
@@ -151,6 +198,93 @@ export async function runCli(argv: string[], write: (text: string) => void = tex
   } finally {
     store.close();
   }
+}
+
+async function runSubagentCommand(
+  options: CliOptions,
+  workspace: Workspace,
+  write: (text: string) => void,
+): Promise<number> {
+  await ensureHarnessLayout(workspace);
+  if (options.subcommand === 'create') {
+    if (!options.name) {
+      write('A subagent name is required: harness subagent create <name> --prompt <file>\n');
+      return 1;
+    }
+    if (!options.promptFile) {
+      write('A prompt file is required: harness subagent create <name> --prompt <file>\n');
+      return 1;
+    }
+    const promptText = await readFile(options.promptFile, 'utf8');
+    const allow = options.allow
+      ? options.allow.split(',').map(item => item.trim()).filter(Boolean)
+      : undefined;
+    const spec = await createSubagent(workspace, {
+      name: options.name,
+      promptText,
+      allow,
+    });
+    write(`Created subagent ${spec.name} (${spec.id})\n`);
+    write(`  allow: ${spec.allow.join(', ')}\n`);
+    return 0;
+  }
+  if (options.subcommand === 'list') {
+    const specs = await listSubagents(workspace);
+    if (specs.length === 0) {
+      write('No subagents saved.\n');
+      return 0;
+    }
+    for (const spec of specs) {
+      write(`${spec.name}\t${spec.allow.join(', ')}\n`);
+    }
+    return 0;
+  }
+  if (options.subcommand === 'run') {
+    if (!options.name) {
+      write('A subagent name is required: harness subagent run <name> <goal>\n');
+      return 1;
+    }
+    if (!options.prompt) {
+      write('A goal is required: harness subagent run <name> <goal>\n');
+      return 1;
+    }
+    const { spec, prompt } = await loadSubagent(workspace, options.name);
+    const model = createModel({
+      apiKey: options.apiKey,
+      baseUrl: options.baseUrl,
+      model: options.model ?? spec.model,
+    });
+    if (!model) {
+      write('An API key is required for run (OPENAI_API_KEY or --api-key).\n');
+      return 1;
+    }
+    const store = openCupStore(workspace);
+    try {
+      const { cup } = createHarnessCup(workspace, store.receiptSink, store);
+      const sub = subagentSubject(spec.name, workspace.root);
+      allowCapabilitiesFor(cup, sub.id, spec.allow);
+      const state = await loadHarnessState(workspace, store, sub.id);
+      state.prompt = prompt;
+      const session = new SessionLog(workspace, randomUUID(), store, sub.id);
+      const result = await runAgentLoop({
+        cup,
+        coder: sub,
+        workspace,
+        state,
+        model,
+        goal: options.prompt,
+        maxTurns: options.maxTurns,
+        session,
+      });
+      write(`${stripReasoning(result.text)}\n\n[stop=${result.stopReason} turns=${result.turns} session=${result.sessionId}]\n`);
+      return 0;
+    } finally {
+      store.close();
+    }
+  }
+  write(`Unknown subagent subcommand: ${options.subcommand || '(none)'}\n`);
+  write(USAGE);
+  return 1;
 }
 
 const isMain = process.argv[1] && (process.argv[1].endsWith('cli.ts') || process.argv[1].endsWith('cli.js'));

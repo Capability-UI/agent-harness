@@ -9,6 +9,39 @@ export function coderSubject(workspaceId: string): Subject {
   return subject(CODER_ID, { role: 'coder', workspaceId }, true);
 }
 
+/** Grant a subject discover/inspect/execute allow policies for a set of
+ * capability ids, mirroring the coder grants. Deny-by-default ensures the
+ * subject gets nothing beyond the ids passed here. */
+export function allowCapabilitiesFor(
+  cup: CapabilityUI,
+  subjectId: string,
+  capabilityIds: string[],
+): void {
+  for (const capabilityId of capabilityIds) {
+    cup.policy.allow({
+      id: `${subjectId}-discover-${capabilityId}`,
+      principal: { id: subjectId },
+      operation: 'discover',
+      resource: { id: capabilityId },
+      priority: 10,
+    });
+    cup.policy.allow({
+      id: `${subjectId}-inspect-${capabilityId}`,
+      principal: { id: subjectId },
+      operation: 'inspect',
+      resource: { id: capabilityId },
+      priority: 10,
+    });
+    cup.policy.allow({
+      id: `${subjectId}-execute-${capabilityId}`,
+      principal: { id: subjectId },
+      operation: 'execute',
+      resource: { id: capabilityId },
+      priority: 10,
+    });
+  }
+}
+
 export function createHarnessCup(
   workspace: Workspace,
   receipts?: ReceiptSink,
@@ -16,29 +49,10 @@ export function createHarnessCup(
 ): { cup: CapabilityUI; coder: Subject } {
   const cup = denyByDefault(receipts ? { receipts } : undefined);
   const coder = coderSubject(workspace.root);
-  for (const capability of codingCapabilities(workspace, store)) {
+  const capabilities = codingCapabilities(workspace, store);
+  for (const capability of capabilities) {
     cup.register(capability);
-    cup.policy.allow({
-      id: `${coder.id}-discover-${capability.id}`,
-      principal: { id: coder.id },
-      operation: 'discover',
-      resource: { id: capability.id },
-      priority: 10,
-    });
-    cup.policy.allow({
-      id: `${coder.id}-inspect-${capability.id}`,
-      principal: { id: coder.id },
-      operation: 'inspect',
-      resource: { id: capability.id },
-      priority: 10,
-    });
-    cup.policy.allow({
-      id: `${coder.id}-execute-${capability.id}`,
-      principal: { id: coder.id },
-      operation: 'execute',
-      resource: { id: capability.id },
-      priority: 10,
-    });
   }
+  allowCapabilitiesFor(cup, coder.id, capabilities.map(capability => capability.id));
   return { cup, coder };
 }
