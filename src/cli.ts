@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_MAX_TURNS } from './constants.js';
+import { openCupStore } from './cup-store.js';
 import { createHarnessCup } from './host.js';
 import { ensureHarnessLayout, loadHarnessState } from './harness-state.js';
 import { runAgentLoop } from './loop.js';
@@ -103,8 +104,8 @@ export async function runCli(argv: string[], write: (text: string) => void = tex
     write(`Initialized harness files under ${workspace.join('.harness')}\n`);
     return 0;
   }
-  const { cup, coder } = createHarnessCup(workspace);
   if (options.command === 'tools') {
+    const { cup, coder } = createHarnessCup(workspace);
     const view = await cup.project({
       subject: coder,
       goal: options.prompt || 'list tools',
@@ -130,20 +131,26 @@ export async function runCli(argv: string[], write: (text: string) => void = tex
     return 1;
   }
   await ensureHarnessLayout(workspace);
-  const state = await loadHarnessState(workspace);
-  const session = new SessionLog(workspace, randomUUID());
-  const result = await runAgentLoop({
-    cup,
-    coder,
-    workspace,
-    state,
-    model,
-    goal: options.prompt,
-    maxTurns: options.maxTurns,
-    session,
-  });
-  write(`${stripReasoning(result.text)}\n\n[stop=${result.stopReason} turns=${result.turns} session=${result.sessionId}]\n`);
-  return 0;
+  const store = openCupStore(workspace);
+  try {
+    const { cup, coder } = createHarnessCup(workspace, store.receiptSink, store);
+    const state = await loadHarnessState(workspace, store, coder.id);
+    const session = new SessionLog(workspace, randomUUID(), store, coder.id);
+    const result = await runAgentLoop({
+      cup,
+      coder,
+      workspace,
+      state,
+      model,
+      goal: options.prompt,
+      maxTurns: options.maxTurns,
+      session,
+    });
+    write(`${stripReasoning(result.text)}\n\n[stop=${result.stopReason} turns=${result.turns} session=${result.sessionId}]\n`);
+    return 0;
+  } finally {
+    store.close();
+  }
 }
 
 const isMain = process.argv[1] && (process.argv[1].endsWith('cli.ts') || process.argv[1].endsWith('cli.js'));

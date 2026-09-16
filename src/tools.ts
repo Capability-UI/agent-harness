@@ -6,10 +6,15 @@ import {
   type ExecutionContext,
 } from '@capability-ui/core';
 import { FEATURE_LIST_FILE, HARNESS_DIR, MEMORY_FILE, PROGRESS_FILE } from './constants.js';
+import { CODER_SUBJECT_ID, type CupStore } from './cup-store.js';
 import { globWorkspace, grepWorkspace, runBash, formatBashObservation } from './fs-tools.js';
 import { loadHarnessState } from './harness-state.js';
 import { capObservationSync } from './observations.js';
 import type { Workspace } from './workspace.js';
+
+function actingSubject(context: ExecutionContext): string {
+  return context.actorId ?? CODER_SUBJECT_ID;
+}
 
 function asRecord(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
@@ -42,7 +47,7 @@ function capabilityBase(id: string, options: {
   });
 }
 
-export function codingCapabilities(workspace: Workspace): Capability[] {
+export function codingCapabilities(workspace: Workspace, store?: CupStore): Capability[] {
   return [
     capabilityBase('workspace.read', {
       description: 'Read a UTF-8 text file from the workspace and return its contents. Use before editing to see exact text. Path must be relative to workspace root.',
@@ -154,7 +159,8 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
       sideEffects: [],
       reversibility: 'reversible',
       inputSchema: { type: 'object', properties: {} },
-      handler: async () => loadHarnessState(workspace),
+      handler: async (_input: unknown, context: ExecutionContext) =>
+        loadHarnessState(workspace, store, actingSubject(context)),
     }),
     capabilityBase('harness.memory.append_progress', {
       description: 'Append a short progress note to durable harness memory so later turns retain what was done and learned. Keep notes concise to save context window.',
@@ -166,10 +172,16 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
         required: ['text'],
         properties: { text: { type: 'string', description: 'Progress note to append to memory.' } },
       },
-      handler: async (input: unknown) => {
+      handler: async (input: unknown, context: ExecutionContext) => {
+        const text = str(asRecord(input), 'text');
+        if (store) {
+          const subject = actingSubject(context);
+          await store.appendProgress(subject, text);
+          return { subject, appended: true };
+        }
         const path = join(HARNESS_DIR, PROGRESS_FILE);
         const prev = await workspace.readText(path).catch(() => '');
-        const next = `${prev.trim()}\n\n${str(asRecord(input), 'text').trim()}\n`;
+        const next = `${prev.trim()}\n\n${text.trim()}\n`;
         return workspace.writeText(path, next);
       },
     }),
@@ -183,8 +195,13 @@ export function codingCapabilities(workspace: Workspace): Capability[] {
         required: ['value'],
         properties: { value: { type: 'object', description: 'JSON object to store as the memory value.' } },
       },
-      handler: async (input: unknown) => {
+      handler: async (input: unknown, context: ExecutionContext) => {
         const value = asRecord(input).value ?? {};
+        if (store) {
+          const subject = actingSubject(context);
+          await store.writeMemoryJson(subject, value);
+          return { subject, written: true };
+        }
         return workspace.writeText(join(HARNESS_DIR, MEMORY_FILE), `${JSON.stringify(value, null, 2)}\n`);
       },
     }),

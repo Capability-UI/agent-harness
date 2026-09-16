@@ -10,6 +10,7 @@ import {
   SKILLS_DIR,
   SKILL_INDEX_DESC_CAP,
 } from './constants.js';
+import type { CupStore } from './cup-store.js';
 import type { Workspace } from './workspace.js';
 
 export interface SkillIndexEntry {
@@ -112,14 +113,28 @@ export async function ensureHarnessLayout(workspace: Workspace): Promise<void> {
   }
 }
 
-export async function loadHarnessState(workspace: Workspace): Promise<HarnessState> {
+export async function loadHarnessState(
+  workspace: Workspace,
+  store?: CupStore,
+  subject?: string,
+): Promise<HarnessState> {
   const root = workspace.join(HARNESS_DIR);
   const repoSkills = await listMarkdownEntries(workspace.join('skills'));
   const harnessSkills = await listMarkdownEntries(join(root, SKILLS_DIR));
+  const fileProgress = await readOptional(join(root, PROGRESS_FILE));
+  const fileMemory = await parseJsonFile(join(root, MEMORY_FILE));
+  let progress = fileProgress;
+  let memory = fileMemory;
+  if (store && subject) {
+    const storedProgress = await store.readProgress(subject, subject);
+    if (storedProgress.trim()) progress = storedProgress;
+    const storedMemory = await store.readMemoryJson(subject, subject);
+    if (storedMemory !== undefined) memory = storedMemory;
+  }
   return {
     prompt: await readOptional(join(root, PROMPT_FILE)),
-    progress: await readOptional(join(root, PROGRESS_FILE)),
-    memory: await parseJsonFile(join(root, MEMORY_FILE)),
+    progress,
+    memory,
     featureList: await parseJsonFile(join(root, FEATURE_LIST_FILE)),
     skills: [...harnessSkills, ...repoSkills],
     subagents: await listMarkdownEntries(join(root, AGENTS_DIR)),

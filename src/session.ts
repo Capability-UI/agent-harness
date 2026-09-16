@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { HARNESS_DIR, SESSIONS_DIR } from './constants.js';
+import { CODER_SUBJECT_ID, type CupStore } from './cup-store.js';
 import type { Workspace } from './workspace.js';
 
 export type SessionEvent =
@@ -33,14 +34,22 @@ export class SessionLog {
   readonly id: string;
   readonly path: string;
   readonly events: SessionEvent[] = [];
+  private readonly store?: CupStore;
+  private readonly subject: string;
 
-  constructor(workspace: Workspace, id: string) {
+  constructor(workspace: Workspace, id: string, store?: CupStore, subject?: string) {
     this.id = id;
     this.path = join(workspace.root, HARNESS_DIR, SESSIONS_DIR, `${id}.jsonl`);
+    this.store = store;
+    this.subject = subject ?? CODER_SUBJECT_ID;
   }
 
   async append(event: SessionEvent): Promise<void> {
     this.events.push(event);
+    if (this.store) {
+      await this.store.appendSessionEvent(this.subject, this.id, event);
+      return;
+    }
     await mkdir(dirname(this.path), { recursive: true });
     await appendFile(this.path, `${JSON.stringify(event)}\n`, 'utf8');
   }
