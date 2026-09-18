@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import './sqlite-warning.js';
 import {
   defineCapability,
   type Capability,
@@ -103,14 +104,14 @@ export function codingCapabilities(workspace: Workspace, store?: CupStore): Capa
       },
     }),
     capabilityBase('workspace.glob', {
-      description: 'List workspace files matching a glob pattern. Use to discover files by name or extension. Supports recursive ** wildcards.',
+      description: 'List workspace files matching a glob pattern. Use to discover files by name or extension. Patterns match the whole workspace-relative path: `*.md` is only files in the workspace root, `**/*.md` is any depth including root, `docs/*.md` is one directory.',
       risk: 'low',
       sideEffects: [],
       reversibility: 'reversible',
       inputSchema: {
         type: 'object',
         required: ['pattern'],
-        properties: { pattern: { type: 'string', description: 'Glob pattern relative to the workspace root, e.g. src/**/*.ts.' } },
+        properties: { pattern: { type: 'string', description: 'Glob against workspace-relative paths. `*.md` is non-recursive (root only). `**/*.md` matches markdown at any depth, including the workspace root.' } },
       },
       handler: async (input: unknown) => {
         const pattern = str(asRecord(input), 'pattern');
@@ -138,7 +139,7 @@ export function codingCapabilities(workspace: Workspace, store?: CupStore): Capa
       },
     }),
     capabilityBase('workspace.bash', {
-      description: 'Run a shell command from the workspace root and return its stdout, stderr, and exit code. Use for building, running tests, or inspecting the environment. Quote all arguments containing spaces to prevent word splitting.',
+      description: 'Run a shell command from the workspace root and return its stdout, stderr, and exit code. Commands that exceed BASH_TIMEOUT_MS (30s) are killed: the result has timedOut=true, reason=BASH_TIMEOUT, and exitCode 124. Do not nest long `harness subagent run` here; use harness.subagent.run instead.',
       risk: 'high',
       sideEffects: ['process_spawn'],
       reversibility: 'irreversible',

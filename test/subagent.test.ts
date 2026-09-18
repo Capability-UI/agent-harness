@@ -98,6 +98,15 @@ test('CUP scoping: a subagent gets only its allowed capabilities', async () => {
     context: { purpose: 'coding', channel: 'cli' },
   });
   assert.equal(denied.status, 'denied');
+  const writeAttempt = await cup.execute({
+    subject: reviewer,
+    capability: 'workspace.write',
+    input: { path: 'SHOULD_NOT_EXIST.txt', content: 'nope' },
+    purpose: 'coding',
+    context: { purpose: 'coding', channel: 'cli' },
+  });
+  assert.equal(writeAttempt.status, 'denied');
+  await assert.rejects(() => workspace.readText('SHOULD_NOT_EXIST.txt'));
 
   // The granted capability still works.
   await workspace.writeText('README.md', 'hello\n');

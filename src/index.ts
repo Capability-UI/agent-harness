@@ -1,5 +1,8 @@
 export { runCli } from './cli.js';
 export { createHarnessCup, coderSubject, allowCapabilitiesFor } from './host.js';
+export { runNamedSubagent } from './run-subagent.js';
+export { unauthorizedToolSpecs } from './loop.js';
+export { researchEvalOutcome } from './eval-score.js';
 export {
   createSubagent,
   loadSubagent,

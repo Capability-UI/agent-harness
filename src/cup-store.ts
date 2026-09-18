@@ -1,3 +1,4 @@
+import './sqlite-warning.js';
 import {
   CUP_SQLITE_SCHEMA,
   SqliteCupPersistence,

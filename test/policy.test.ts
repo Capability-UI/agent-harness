@@ -53,7 +53,7 @@ test('project lists the ACI tool set', async () => {
   const { cup, coder } = await setup();
   const view = await cup.project({ subject: coder, goal: 'code', context: { purpose: 'coding' } });
   const ids = view.capabilities.map(item => item.id).sort();
-  for (const required of ['workspace.read', 'workspace.write', 'workspace.edit', 'workspace.bash', 'workspace.glob', 'workspace.grep']) {
+  for (const required of ['workspace.read', 'workspace.write', 'workspace.edit', 'workspace.bash', 'workspace.glob', 'workspace.grep', 'harness.subagent.run']) {
     assert.ok(ids.includes(required), required);
   }
 });

@@ -32,12 +32,13 @@ Env vars `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` work the same w
 | --- | --- |
 | `src/host.ts` | deny-by-default CUP, `agent:coder` |
 | `src/tools.ts` | ACI capabilities |
+| `src/subagent-tool.ts` | `harness.subagent.run` |
 | `src/loop.ts` | ReAct through `cup.execute` |
 | `src/context.ts` | AGENTS.md map, skill index, observation masking |
-| `src/session.ts` | `.harness/sessions/*.jsonl` |
+| `src/session.ts` | session events in `cup.db` (file jsonl fallback) |
 | `src/repl.ts` | reserved RLM interface |
 
-Harness state lives under `.harness/` (`prompt.md`, `progress.md`, `memory.json`, `skills/`, `agents/`). There is no automatic Continual Harness Refiner in v1. The agent may append progress and rewrite memory JSON through CUP.
+Harness state lives under `.harness/` (`prompt.md`, `feature_list.json`, `skills/`, `agents/`, **`cup.db`**). `progress.md` and `memory.json` are leftover scaffolds; durable memory is SQLite. There is no automatic Continual Harness Refiner in v1.
 
 ## Tests
 

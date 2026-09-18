@@ -101,11 +101,11 @@ export async function ensureHarnessLayout(workspace: Workspace): Promise<void> {
   }
   const progressPath = join(root, PROGRESS_FILE);
   if (!(await readOptional(progressPath))) {
-    await writeFile(progressPath, '# Progress\n\nNo sessions yet.\n', 'utf8');
+    await writeFile(progressPath, '# Progress\n\nNo sessions yet.\n\nAuthoritative progress lives in `.harness/cup.db`; this file is a leftover scaffold.\n', 'utf8');
   }
   const memoryPath = join(root, MEMORY_FILE);
   if (!(await readOptional(memoryPath))) {
-    await writeFile(memoryPath, '{}\n', 'utf8');
+    await writeFile(memoryPath, `${JSON.stringify({ _deprecated: 'Authoritative memory is .harness/cup.db; this file is a leftover scaffold.' }, null, 2)}\n`, 'utf8');
   }
   const featuresPath = join(root, FEATURE_LIST_FILE);
   if (!(await readOptional(featuresPath))) {

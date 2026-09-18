@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -15,9 +15,10 @@ test('tools lists CUP capabilities without a model key', async () => {
   assert.equal(code, 0);
   assert.match(out, /workspace.read/);
   assert.match(out, /workspace.bash/);
+  assert.match(out, /harness.subagent.run/);
 });
 
-test('init creates harness files', async () => {
+test('init creates harness files including cup.db', async () => {
   const root = join(tmpdir(), `harness-${randomUUID()}`);
   await mkdir(root, { recursive: true });
   const code = await runCli(['init', '--workspace', root], () => undefined);
@@ -25,6 +26,8 @@ test('init creates harness files', async () => {
   const ws = new Workspace(root);
   const progress = await ws.readText('.harness/progress.md');
   assert.match(progress, /Progress/);
+  await access(ws.join('.harness/cup.db'));
+  assert.match(progress, /cup\.db/);
 });
 
 test('run without a key exits 1', async () => {
@@ -55,6 +58,18 @@ test('parseHarnessArgv accepts provider flags', () => {
   assert.equal(options.apiKey, 'or-key');
   assert.equal(options.model, 'anthropic/claude-sonnet-4');
   assert.equal(options.prompt, 'fix tests');
+});
+
+test('unknown first-token command prints usage and does not require an API key', async () => {
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  let out = '';
+  const code = await runCli(['autoresearch'], text => { out += text; });
+  if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  assert.equal(code, 1);
+  assert.match(out, /Unknown command: autoresearch/);
+  assert.match(out, /Usage:/);
+  assert.doesNotMatch(out, /API key is required/);
 });
 
 test('help documents custom base url', async () => {
