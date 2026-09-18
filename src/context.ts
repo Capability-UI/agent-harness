@@ -42,6 +42,7 @@ export function buildSystemPrompt(state: HarnessState, workspaceRoot: string, go
     '',
     '## Tool rules',
     'Use workspace.* tools for files and commands. Prefer workspace.edit for surgical changes.',
+    'To launch a saved subagent, call harness.subagent.run (in-process). Do not nest `harness subagent run` inside workspace.bash; long nested CLI runs hit BASH_TIMEOUT_MS and die.',
     'Do not claim a feature passes unless harness.features.read shows passes true or tests you ran succeeded.',
     'Large outputs may be truncated to a workspace artifact path; read that path if you need more.',
   ].join('\n');

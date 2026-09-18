@@ -12,7 +12,7 @@
     }
   },
   "bin": {
-    "harness": "./dist/src/cli.js"
+    "harness": "./dist/src/bin.js"
   },
   "files": [
     "dist/src",
@@ -22,7 +22,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test dist/test/*.test.js",
-    "harness": "tsx src/cli.ts"
+    "harness": "tsx src/bin.ts"
   },
   "repository": {
     "type": "git",

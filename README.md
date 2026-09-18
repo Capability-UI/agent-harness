@@ -35,7 +35,7 @@ npm install        # clones + builds the pinned @capability-ui/core commit
 npm run build
 ```
 
-The CLI binary is `dist/src/cli.js` (exposed as `harness`). Re-run `npm run build`
+The CLI binary is `dist/src/bin.js` (exposed as `harness`). Re-run `npm run build`
 after a clean install or any source change. For a no-build dev loop use
 `npm run harness -- <args>` (runs `src/cli.ts` through `tsx`).
 
@@ -95,7 +95,7 @@ harness <run|init|tools|subagent> [prompt] [options]
 
 | Command | Description |
 | --- | --- |
-| `run <prompt>` | Run the agent loop toward a goal as `agent:coder` (needs an API key). |
+| `run <prompt>` | Run the agent loop toward a goal as `agent:coder` (needs an API key). First-token verbs other than `run`, `init`, `tools`, and `subagent` are unknown commands (usage + exit 1), not a run prompt. |
 | `init` | Create the `.harness/` layout in the workspace. |
 | `tools` | List the CUP-authorized tools for `agent:coder`. |
 | `subagent create <name> --prompt <file> [--allow a,b,c]` | Save a reusable, CUP-scoped subagent (own subject + memory). |
@@ -124,14 +124,14 @@ that is surfaced to the model as a function description.
 | `workspace.read` | low | Read a text file from the workspace. |
 | `workspace.write` | medium | Create/overwrite a file. |
 | `workspace.edit` | medium | Replace one exact, unique occurrence of a string. |
-| `workspace.glob` | low | List files matching a glob (supports `**`). |
+| `workspace.glob` | low | List files matching a glob. `*.md` is workspace-root only; `**/*.md` matches any depth including root. |
 | `workspace.grep` | low | Search file contents by JavaScript regex. |
 | `workspace.bash` | high | Run a shell command from the workspace root. |
 | `harness.memory.read` | low | Read AGENTS.md, progress, skills, and features. |
 | `harness.memory.append_progress` | low | Append a durable progress note. |
 | `harness.memory.write_json` | medium | Persist a structured JSON memory value. |
 | `harness.skill.read` | low | Load a named skill body from the catalog. |
-| `harness.features.read` | low | Read the feature list with pass/fail status. |
+| `harness.subagent.run` | high | Run a saved named subagent in-process (coder only). Prefer this over nesting `harness subagent run` in `workspace.bash`. |
 
 ## How the loop works
 
@@ -147,13 +147,21 @@ that is surfaced to the model as a function description.
 To keep context bounded, only the last `KEEP_LAST_FULL_OBSERVATIONS` (5) tool
 outputs are kept verbatim; older ones are masked. Large observations are capped at
 `OBSERVATION_CHAR_CAP` (32 KB) and spilled to a workspace artifact path. Shell
-commands time out after `BASH_TIMEOUT_MS` (30 s). See `src/constants.ts`.
+commands time out after `BASH_TIMEOUT_MS` (30 s). A timeout returns
+`timedOut=true`, `reason=BASH_TIMEOUT`, and `exitCode` 124 (not a thrown
+error). Nested `harness subagent run` inside `workspace.bash` is still bounded
+by that timer. Prefer `harness.subagent.run` for in-process child sessions.
+See `src/constants.ts` and the
+[complex-suite improvement plan](docs/plans/complex-suite-improvement-plan.md).
 
 ## Harness state (`.harness/`)
 
 State is split between **files** (config the agent reads) and a **SQLite database**
 (`cup.db`, the durable CUP model + memory + sessions + receipts). `harness init`
-(and the first `run`) scaffold it per workspace:
+writes the file tree **and** creates `.harness/cup.db`. `harness tools` still
+uses in-memory CUP and does not require the DB. Init still scaffolds leftover
+`memory.json`, `progress.md`, and `sessions/`; those files are **not**
+authoritative once SQLite exists:
 
 | Path | Role | Storage |
 | --- | --- | --- |
@@ -192,8 +200,10 @@ OPENAI_API_KEY=... harness subagent run reviewer "review src/ for missing error 
   `.harness/agents/<name>/`, and the subagent's memory accumulates in `cup.db`
   keyed by `agent:sub:<name>`, so each `subagent run` resumes the same persona.
 - **CUP-scoped capabilities:** `--allow` (default: a read-mostly set) becomes the
-  subagent's grant; its authorized tool view contains only those capabilities, and
-  anything else is `denied`.
+  subagent's grant; CUP `project` lists only those execute-allowed tools. The
+  harness also surfaces other workspace tools as **not granted** so a call is
+  `denied` with a CUP receipt (the file is not written). The coder can launch a
+  saved subagent in-process with `harness.subagent.run`.
 - **Memory isolation:** a subagent reads only its own memory/sessions; the main
   agent can read a subagent's (labeled by owner). See the design in
   [docs/subagents.md](docs/subagents.md).
@@ -242,6 +252,7 @@ under `research/eval/data/` for reproducibility (`research/eval/fetch-benchmark.
 | Path | Role |
 | --- | --- |
 | `src/cli.ts` | Argument parsing and command dispatch. |
+| `src/bin.ts` | CLI entry: re-exec with sqlite ExperimentalWarning disabled. |
 | `src/host.ts` | Deny-by-default CUP, `agent:coder` subject. |
 | `src/tools.ts` | Coding capabilities (the ACI tool set). |
 | `src/loop.ts` | ReAct loop over `cup.execute`. |
@@ -270,7 +281,8 @@ npm run check   # type-check only (tsc --noEmit)
 - Subagents (design, memory model, CUP scoping, with diagrams): [docs/subagents.md](docs/subagents.md)
 - Developer overview: [docs/developer/overview.md](docs/developer/overview.md)
 - Research synthesis: [docs/llm-agent-harness-research.md](docs/llm-agent-harness-research.md)
-- Plans: [CUP as the operating model](docs/plans/2026-09-15-001-plan-cup-agent-operating-model.md) · [initial harness plan](docs/plans/2026-09-07-001-plan-capability-ui-harness.md)
+- Plans: [complex-suite improvement plan](docs/plans/complex-suite-improvement-plan.md) · [CUP as the operating model](docs/plans/2026-09-15-001-plan-cup-agent-operating-model.md) · [initial harness plan](docs/plans/2026-09-07-001-plan-capability-ui-harness.md)
+- Box eval notes (2026-09-18): [docs/eval/box-complex-suite-2026-09-18.md](docs/eval/box-complex-suite-2026-09-18.md)
 
 ## License
 

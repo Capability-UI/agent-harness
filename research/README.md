@@ -47,8 +47,8 @@ flowchart LR
 - `passes` — number of tasks whose deterministic grader passed (**primary**, higher is better).
 - `totalTurns` — sum of agent turns across tasks (**tie-breaker**, lower is better when `passes` is equal).
 
-`loop.mjs` accepts a proposal only when it (a) builds, (b) keeps every existing unit
-test green, and (c) strictly improves `(passes, -totalTurns)`.
+`eval/run.mjs` prints a one-line error to stderr and exits **non-zero** when
+`OPENAI_API_KEY` is missing or every task `crashed`. JSON is still printed.
 
 ## Quick start
 

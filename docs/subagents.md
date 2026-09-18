@@ -10,11 +10,12 @@ A **subagent** is a reusable, CUP-scoped agent persona. It has:
 You define one once and launch it as many sessions as you like; each run resumes
 the same persona with its accumulated, isolated memory.
 
-> Implemented today: `subagent create | list | run` (top-level launch), CUP-scoped
-> capabilities, subject-keyed memory/sessions, and the read access model. Planned
-> follow-ups: in-loop `harness.subagent.spawn` (a running agent spawning a child)
-> and least-privilege `delegate()` — see the
-> [plan](plans/2026-09-15-001-plan-cup-agent-operating-model.md).
+> Implemented today: `subagent create | list | run` (top-level launch), in-loop
+> `harness.subagent.run`, CUP-scoped capabilities, subject-keyed memory/sessions,
+> and the read access model. Planned follow-ups: least-privilege `delegate()`.
+> See the
+> [CUP operating-model plan](plans/2026-09-15-001-plan-cup-agent-operating-model.md)
+> and [complex-suite findings](plans/complex-suite-improvement-plan.md).
 
 ---
 
@@ -81,7 +82,7 @@ sequenceDiagram
   CLI->>AL: runAgentLoop(subject = agent:sub:reviewer, state, goal)
   AL->>CUP: project(agent:sub:reviewer)
   CUP-->>AL: view = ONLY granted capabilities
-  AL->>CUP: execute(tool)  (denied if not in allow[])
+  AL->>CUP: execute(tool)  (ungranted ids are omitted from the view)
   CUP->>DB: receipts + session events (owner = agent:sub:reviewer)
   AL-->>CLI: result
   CLI-->>User: summary
@@ -102,8 +103,10 @@ flowchart TB
   Rev -. "execute workspace.bash -> denied" .-> X["(not granted)"]
 ```
 
-- **Capabilities:** the subagent's CUP view = exactly its `allow[]`; an ungranted
-  call (e.g. `workspace.bash` for a read-only reviewer) returns a `denied` receipt.
+- **Capabilities:** the subagent's CUP execute view = exactly its `allow[]`.
+  The harness also offers ungranted workspace tools as "NOT GRANTED" so an
+  attempted `workspace.write` / `workspace.bash` is denied and receipted.
+  See [complex-suite plan P1.5](plans/complex-suite-improvement-plan.md).
 - **Memory:** a subagent reads only its own memory/sessions; the main agent may read
   any subject's (labeled by owner). Enforced by `assertCanRead(requester, owner)` in
   `src/cup-store.ts` (allow iff `requester === owner` or `requester === 'agent:coder'`).
@@ -119,8 +122,8 @@ flowchart TB
 
 ## Roadmap (from the plan)
 
-- **In-loop spawn:** a `harness.subagent.spawn { name, goal }` capability so a running
-  agent can launch a child mid-task.
+- **In-loop spawn:** `harness.subagent.run { name, goal, maxTurns? }` is implemented
+  so a running coder can launch a child without `workspace.bash`.
 - **Least-privilege delegation:** the parent hands the child a scoped, time-boxed,
   revocable subset of its authority via CUP `delegate()` / `revokeGrant()`.
 - **Optional global scope:** promote a subagent (definition and/or memory) to a shared

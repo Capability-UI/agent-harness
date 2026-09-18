@@ -12,7 +12,8 @@ function matchGlob(relPath: string, pattern: string): boolean {
   const value = relPath.replace(/\\/g, '/');
   if (normalized.startsWith('**/')) {
     const rest = normalized.slice(3);
-    return value === rest || value.endsWith(`/${rest}`) || globStar(value, normalized);
+    // `**/*.md` matches root-level files as well as nested ones (globstar depth 0+).
+    return matchGlob(value, rest) || globStar(value, normalized);
   }
   return globStar(value, normalized);
 }
@@ -85,7 +86,21 @@ export async function grepWorkspace(workspace: Workspace, pattern: string, pathP
   return lines;
 }
 
-export async function runBash(workspace: Workspace, command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+export interface BashResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+  signal: NodeJS.Signals | null;
+  timeoutMs: number;
+  reason?: string;
+}
+
+export async function runBash(
+  workspace: Workspace,
+  command: string,
+  timeoutMs = BASH_TIMEOUT_MS,
+): Promise<BashResult> {
   if (!command.trim()) throw new Error('COMMAND_REQUIRED');
   return new Promise((resolvePromise, reject) => {
     const child = spawn('bash', ['-lc', command], {
@@ -94,24 +109,40 @@ export async function runBash(workspace: Workspace, command: string): Promise<{ 
     });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill('SIGKILL');
-      reject(new Error('BASH_TIMEOUT'));
-    }, BASH_TIMEOUT_MS);
+    }, timeoutMs);
     child.stdout.on('data', chunk => { stdout += String(chunk); });
     child.stderr.on('data', chunk => { stderr += String(chunk); });
     child.on('error', error => {
       clearTimeout(timer);
       reject(error);
     });
-    child.on('close', code => {
+    child.on('close', (code, signal) => {
       clearTimeout(timer);
-      resolvePromise({ stdout, stderr, exitCode: code ?? 1 });
+      const result: BashResult = {
+        stdout,
+        stderr,
+        exitCode: timedOut ? 124 : (code ?? 1),
+        timedOut,
+        signal: signal ?? null,
+        timeoutMs,
+      };
+      if (timedOut) result.reason = 'BASH_TIMEOUT';
+      else if (signal) result.reason = `SIGNAL_${signal}`;
+      resolvePromise(result);
     });
   });
 }
 
-export async function formatBashObservation(workspace: Workspace, result: { stdout: string; stderr: string; exitCode: number }, label: string): Promise<string> {
-  const raw = `exit ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
+export async function formatBashObservation(workspace: Workspace, result: BashResult, label: string): Promise<string> {
+  const timeoutLine = result.timedOut
+    ? `timedOut=true reason=${result.reason ?? 'BASH_TIMEOUT'} timeoutMs=${result.timeoutMs}\n`
+    : result.reason
+      ? `reason=${result.reason}\n`
+      : '';
+  const raw = `${timeoutLine}exit ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
   return capObservationSync(raw, workspace, label);
 }

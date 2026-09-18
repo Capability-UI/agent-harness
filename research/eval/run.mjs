@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { apiKeyPresent, researchEvalOutcome } from '../../dist/src/eval-score.js';
 
 const ALLOWED_BATTERIES = {
   battery: './battery.mjs',
@@ -25,7 +26,7 @@ const { TASKS } = await import(batterySpec);
 
 const execFileP = promisify(execFile);
 const HARNESS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const CLI = join(HARNESS_ROOT, 'dist', 'src', 'cli.js');
+const CLI = join(HARNESS_ROOT, 'dist', 'src', 'bin.js');
 const TASK_TIMEOUT_MS = Number(process.env.EVAL_TASK_TIMEOUT_MS ?? 240000);
 
 function parseTurns(stdout) {
@@ -63,7 +64,10 @@ async function main() {
   const passes = results.filter(r => r.pass).length;
   const totalTurns = results.reduce((sum, r) => sum + r.turns, 0);
   const metric = { battery: batteryKey, model: process.env.OPENAI_MODEL ?? '(default)', passes, total: results.length, totalTurns, tasks: results };
+  const outcome = researchEvalOutcome(metric, apiKeyPresent(process.env));
+  if (outcome.message) process.stderr.write(`${outcome.message}\n`);
   process.stdout.write(JSON.stringify(metric) + '\n');
+  process.exitCode = outcome.code;
 }
 
 main().catch(error => {

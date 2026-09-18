@@ -1,10 +1,12 @@
-import type { AuthorizedCapability, CapabilityUI, Subject } from '@capability-ui/core';
+import type { AuthorizedCapability, Capability, CapabilityUI, Subject } from '@capability-ui/core';
 import type { ChatMessage, ToolCall } from './context.js';
 import { buildSystemPrompt, maskObservations } from './context.js';
 import type { HarnessState } from './harness-state.js';
 import type { LanguageModel, ToolSpec } from './provider.js';
 import { nowIso, SessionLog, type SessionEvent } from './session.js';
 import type { Workspace } from './workspace.js';
+
+const CODER_ONLY_TOOLS = new Set(['harness.subagent.run']);
 
 export interface LoopResult {
   text: string;
@@ -32,18 +34,38 @@ function argHint(inputSchema: unknown): string {
   return `Args: { ${parts.join(', ')} }. Call with a single valid JSON object.`;
 }
 
+function toToolSpec(capability: {
+  id: string;
+  description?: string;
+  risk?: string;
+  inputSchema?: unknown;
+}, denied = false): ToolSpec {
+  const base = capability.description
+    ? `${capability.description} (${capability.risk ?? 'unknown'} risk)`
+    : `${capability.id} (${capability.risk ?? 'unknown'} risk)`;
+  const deniedNote = denied
+    ? ' NOT GRANTED for this subject: execute is denied and a CUP receipt is recorded.'
+    : '';
+  const hint = argHint(capability.inputSchema);
+  return {
+    name: capability.id,
+    description: hint ? `${base}${deniedNote}. ${hint}` : `${base}${deniedNote}`,
+    inputSchema: (capability.inputSchema ?? { type: 'object' }) as Record<string, unknown>,
+  };
+}
+
 function toolsFromView(capabilities: AuthorizedCapability[]): ToolSpec[] {
-  return capabilities.map(capability => {
-    const base = capability.description
-      ? `${capability.description} (${capability.risk} risk)`
-      : `${capability.id} (${capability.risk} risk)`;
-    const hint = argHint(capability.inputSchema);
-    return {
-      name: capability.id,
-      description: hint ? `${base}. ${hint}` : base,
-      inputSchema: capability.inputSchema,
-    };
-  });
+  return capabilities.map(capability => toToolSpec(capability));
+}
+
+/** Model-facing specs for registered capabilities this subject cannot execute.
+ * CUP `project` omits them (execute-gated); surfacing them lets the model attempt
+ * a call so audits get a deny receipt (P1.5). */
+export function unauthorizedToolSpecs(all: Capability[], allow: readonly string[]): ToolSpec[] {
+  const allowed = new Set(allow);
+  return all
+    .filter(capability => !allowed.has(capability.id) && !CODER_ONLY_TOOLS.has(capability.id))
+    .map(capability => toToolSpec(capability, true));
 }
 
 function parseArgs(raw: string): unknown {
@@ -72,10 +94,15 @@ export async function runAgentLoop(options: {
   goal: string;
   maxTurns: number;
   session: SessionLog;
+  extraTools?: ToolSpec[];
 }): Promise<LoopResult> {
   const { cup, coder, workspace, state, model, goal, maxTurns, session } = options;
   const view = await cup.project({ subject: coder, goal, context: { purpose: 'coding', channel: 'cli', workspace: workspace.root } });
-  const tools = toolsFromView(view.capabilities);
+  const seen = new Set(view.capabilities.map(capability => capability.id));
+  const tools = [
+    ...toolsFromView(view.capabilities),
+    ...(options.extraTools ?? []).filter(tool => !seen.has(tool.name)),
+  ];
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(state, workspace.root, goal) },
     { role: 'user', content: goal },
