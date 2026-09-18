@@ -44,3 +44,7 @@ Harness state lives under `.harness/` (`prompt.md`, `progress.md`, `memory.json`
 ```bash
 npm test
 ```
+
+## Current improvement plan
+
+Live complex-suite findings (nested bash timeout, deny receipts vs tool omission, CLI UX): [complex-suite improvement plan](../plans/complex-suite-improvement-plan.md). Supporting eval notes: [box-complex-suite-2026-09-18](../eval/box-complex-suite-2026-09-18.md).

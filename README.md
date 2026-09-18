@@ -95,7 +95,7 @@ harness <run|init|tools|subagent> [prompt] [options]
 
 | Command | Description |
 | --- | --- |
-| `run <prompt>` | Run the agent loop toward a goal as `agent:coder` (needs an API key). |
+| `run <prompt>` | Run the agent loop toward a goal as `agent:coder` (needs an API key). Unrecognized first tokens currently become this command's prompt (so `harness autoresearch` looks like a missing API key, not an unknown verb). |
 | `init` | Create the `.harness/` layout in the workspace. |
 | `tools` | List the CUP-authorized tools for `agent:coder`. |
 | `subagent create <name> --prompt <file> [--allow a,b,c]` | Save a reusable, CUP-scoped subagent (own subject + memory). |
@@ -124,7 +124,7 @@ that is surfaced to the model as a function description.
 | `workspace.read` | low | Read a text file from the workspace. |
 | `workspace.write` | medium | Create/overwrite a file. |
 | `workspace.edit` | medium | Replace one exact, unique occurrence of a string. |
-| `workspace.glob` | low | List files matching a glob (supports `**`). |
+| `workspace.glob` | low | List files matching a glob (supports `**`). A pattern like `*.md` is not recursive; use `**/*.md` for nested trees. |
 | `workspace.grep` | low | Search file contents by JavaScript regex. |
 | `workspace.bash` | high | Run a shell command from the workspace root. |
 | `harness.memory.read` | low | Read AGENTS.md, progress, skills, and features. |
@@ -147,13 +147,20 @@ that is surfaced to the model as a function description.
 To keep context bounded, only the last `KEEP_LAST_FULL_OBSERVATIONS` (5) tool
 outputs are kept verbatim; older ones are masked. Large observations are capped at
 `OBSERVATION_CHAR_CAP` (32 KB) and spilled to a workspace artifact path. Shell
-commands time out after `BASH_TIMEOUT_MS` (30 s). See `src/constants.ts`.
+commands time out after `BASH_TIMEOUT_MS` (30 s). Nested `harness subagent run`
+inside `workspace.bash` is bounded by that same timer: short nested runs can
+succeed; long nested work is killed rather than streamed. See `src/constants.ts`
+and the [complex-suite improvement plan](docs/plans/complex-suite-improvement-plan.md).
 
 ## Harness state (`.harness/`)
 
 State is split between **files** (config the agent reads) and a **SQLite database**
 (`cup.db`, the durable CUP model + memory + sessions + receipts). `harness init`
-(and the first `run`) scaffold it per workspace:
+writes the file tree. `cup.db` is created lazily on the first path that opens
+the store (`run` / `subagent run`, including a failing run). `harness tools`
+uses in-memory CUP and does not create the DB. Init still scaffolds leftover
+`memory.json`, `progress.md`, and `sessions/`; those files are **not**
+authoritative once SQLite exists:
 
 | Path | Role | Storage |
 | --- | --- | --- |
@@ -192,8 +199,9 @@ OPENAI_API_KEY=... harness subagent run reviewer "review src/ for missing error 
   `.harness/agents/<name>/`, and the subagent's memory accumulates in `cup.db`
   keyed by `agent:sub:<name>`, so each `subagent run` resumes the same persona.
 - **CUP-scoped capabilities:** `--allow` (default: a read-mostly set) becomes the
-  subagent's grant; its authorized tool view contains only those capabilities, and
-  anything else is `denied`.
+  subagent's grant; its authorized tool view contains only those capabilities.
+  Disallowed tools are omitted from the model-facing list (no invoke, so no
+  deny receipt) unless the model somehow calls an id that is not in the view.
 - **Memory isolation:** a subagent reads only its own memory/sessions; the main
   agent can read a subagent's (labeled by owner). See the design in
   [docs/subagents.md](docs/subagents.md).
@@ -270,7 +278,8 @@ npm run check   # type-check only (tsc --noEmit)
 - Subagents (design, memory model, CUP scoping, with diagrams): [docs/subagents.md](docs/subagents.md)
 - Developer overview: [docs/developer/overview.md](docs/developer/overview.md)
 - Research synthesis: [docs/llm-agent-harness-research.md](docs/llm-agent-harness-research.md)
-- Plans: [CUP as the operating model](docs/plans/2026-09-15-001-plan-cup-agent-operating-model.md) · [initial harness plan](docs/plans/2026-09-07-001-plan-capability-ui-harness.md)
+- Plans: [complex-suite improvement plan](docs/plans/complex-suite-improvement-plan.md) · [CUP as the operating model](docs/plans/2026-09-15-001-plan-cup-agent-operating-model.md) · [initial harness plan](docs/plans/2026-09-07-001-plan-capability-ui-harness.md)
+- Box eval notes (2026-09-18): [docs/eval/box-complex-suite-2026-09-18.md](docs/eval/box-complex-suite-2026-09-18.md)
 
 ## License
 
