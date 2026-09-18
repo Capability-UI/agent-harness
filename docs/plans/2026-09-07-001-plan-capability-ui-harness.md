@@ -69,5 +69,6 @@ Repo layout:
 
 - `--refine` Continual Harness Refiner as `agent:refiner`
 - RLM REPL for payloads that do not fit files-plus-cap
-- Sub-agents with attenuated CUP grants
 - Harbor / Terminal-Bench disclosed run
+
+Sub-agents, created work as CUP resources, and CUP as the operating model for attenuated workers: [2026-09-08-001-cup-resources-and-subagents.md](2026-09-08-001-cup-resources-and-subagents.md).
